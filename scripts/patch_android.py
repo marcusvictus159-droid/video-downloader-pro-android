@@ -154,4 +154,19 @@ if "android.intent.action.SEND" not in s:
 
 write(manifest, s)
 print("[ok] AndroidManifest (nativeLibs + compartir enlaces)")
+# 6) Estilos: la app dibuja dentro de las barras del sistema (sin edge-to-edge forzado en Android 15)
+styles = APP / "src" / "main" / "res" / "values" / "styles.xml"
+if styles.exists():
+    s = read(styles)
+    if "windowOptOutEdgeToEdgeEnforcement" not in s:
+        s, n = re.subn(
+            r'(<style name="AppTheme[^"]*"[^>]*>)',
+            r'\1\n        <item name="android:windowOptOutEdgeToEdgeEnforcement">true</item>',
+            s,
+        )
+        write(styles, s)
+        print("[ok] styles.xml: opt-out edge-to-edge en %d estilos" % n)
+else:
+    print("[aviso] no se encontró styles.xml; se omite el opt-out edge-to-edge")
+
 print("Parche completado.")

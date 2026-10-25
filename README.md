@@ -4,7 +4,7 @@ Port a Android de [video-youtube-dowloader](https://github.com/RobertLYucra/vide
 Usa **Capacitor** para la interfaz y la librería nativa **youtubedl-android** (yt-dlp + FFmpeg + Python embebidos) como motor.
 
 ## Qué trae
-- Interfaz móvil con modo claro/oscuro/automático.
+- Interfaz con navegación inferior (Nuevo, Descargas, Ajustes), tema automático/claro/oscuro y barras del sistema integradas.
 - Videos MP4 (con tope de calidad) o audio MP3.
 - Cola de descargas con barra de progreso, ETA y botón de cancelar.
 - **Motor auto-actualizable**: se actualiza cada 2 días y, si una descarga falla, se actualiza y reintenta solo.

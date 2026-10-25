@@ -2,88 +2,185 @@
 <html lang="es">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
   <meta name="color-scheme" content="light dark">
   <title>Video Downloader Pro</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
-  <main class="app">
-    <header class="top">
-      <div>
-        <h1>🎥 Video Downloader Pro</h1>
-        <p class="sub">Videos y música en máxima calidad</p>
-      </div>
-      <button id="themeBtn" class="icon-btn" aria-label="Cambiar tema" title="Tema">🌓</button>
-    </header>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <defs>
+    <symbol id="i-plus" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></symbol>
+    <symbol id="i-tray" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4.5-4.5M12 15l4.5-4.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2"/></symbol>
+    <symbol id="i-sliders" viewBox="0 0 24 24"><path d="M4 7h8M18 7h2M4 17h2M12 17h8"/><circle cx="15" cy="7" r="2.4"/><circle cx="9" cy="17" r="2.4"/></symbol>
+    <symbol id="i-paste" viewBox="0 0 24 24"><rect x="5" y="4.5" width="14" height="16.5" rx="2.5"/><path d="M9 4.5V3.8A.8.8 0 0 1 9.8 3h4.4a.8.8 0 0 1 .8.8v.7M9 11h6M9 15h4"/></symbol>
+    <symbol id="i-close" viewBox="0 0 24 24"><path d="M6.5 6.5l11 11M17.5 6.5l-11 11"/></symbol>
+    <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+    <symbol id="i-alert" viewBox="0 0 24 24"><path d="M12 7.5v5.5M12 16.6v.1"/><circle cx="12" cy="12" r="9"/></symbol>
+    <symbol id="i-film" viewBox="0 0 24 24"><rect x="3.5" y="5" width="17" height="14" rx="3"/><path d="M10.2 9.4v5.2l4.3-2.6z"/></symbol>
+    <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 17.5V6l10-2v11.5"/><circle cx="6.5" cy="17.5" r="2.5"/><circle cx="16.5" cy="15.5" r="2.5"/></symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24"><path d="M9.5 6l6 6-6 6"/></symbol>
+    <symbol id="i-skip" viewBox="0 0 24 24"><path d="M5 5l9 7-9 7zM18 5v14"/></symbol>
+  </defs>
+</svg>
 
-    <section class="card">
-      <div class="engine">
-        <span id="engineDot" class="dot busy"></span>
-        <span id="engineText">Preparando motor…</span>
-        <button id="updateBtn" class="chip" disabled>Actualizar</button>
+<div class="app">
+  <main class="screens">
+
+    <!-- Nuevo -->
+    <section id="s-new" class="screen active" aria-labelledby="t-new">
+      <div class="scroll">
+        <h1 id="t-new" class="title">Descargar</h1>
+
+        <div id="banner" class="banner" hidden>
+          <span class="spin" aria-hidden="true"></span>
+          <span id="bannerText"></span>
+        </div>
+
+        <div class="field">
+          <textarea id="urls" rows="3" placeholder="Pega uno o varios enlaces" aria-label="Enlaces" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false"></textarea>
+          <button id="pasteBtn" class="tool" type="button" aria-label="Pegar enlace">
+            <svg class="ico"><use href="#i-paste"/></svg>
+          </button>
+        </div>
+
+        <div class="seg" role="radiogroup" aria-label="Formato">
+          <button type="button" role="radio" class="seg-btn" data-fmt="mp4">Video MP4</button>
+          <button type="button" role="radio" class="seg-btn" data-fmt="mp3">Solo audio MP3</button>
+        </div>
+
+        <ul class="list">
+          <li id="qualityRow" class="row pick">
+            <div class="row-main"><span class="row-t">Calidad máxima</span></div>
+            <span id="qualityLabel" class="row-v">1080p</span>
+            <svg class="ico chev"><use href="#i-chevron"/></svg>
+            <select id="quality" aria-label="Calidad máxima">
+              <option value="0">La mejor disponible</option>
+              <option value="2160">2160p (4K)</option>
+              <option value="1440">1440p</option>
+              <option value="1080">1080p</option>
+              <option value="720">720p</option>
+              <option value="480">480p</option>
+              <option value="360">360p</option>
+            </select>
+          </li>
+          <li>
+            <label class="row">
+              <div class="row-main">
+                <span class="row-t">Omitir ya descargados</span>
+                <span class="row-s">Ignora los videos que están en el historial</span>
+              </div>
+              <input id="skipHist" type="checkbox" class="switch">
+            </label>
+          </li>
+          <li>
+            <label class="row">
+              <div class="row-main">
+                <span class="row-t">Descargar listas completas</span>
+                <span class="row-s">Si está apagado, solo baja el video del enlace</span>
+              </div>
+              <input id="allowList" type="checkbox" class="switch">
+            </label>
+          </li>
+        </ul>
+      </div>
+      <div class="actionbar">
+        <button id="startBtn" class="primary" type="button" disabled>Descargar</button>
       </div>
     </section>
 
-    <section class="card">
-      <label for="urls" class="lbl">Enlaces (uno por línea)</label>
-      <textarea id="urls" rows="4" placeholder="Pega aquí enlaces de YouTube, Facebook, TikTok, Twitter…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
-      <div class="row">
-        <button id="pasteBtn" class="chip">📋 Pegar</button>
-        <button id="clearBtn" class="chip">🧹 Limpiar</button>
+    <!-- Descargas -->
+    <section id="s-dl" class="screen" aria-labelledby="t-dl">
+      <div class="scroll">
+        <div class="title-row">
+          <h1 id="t-dl" class="title">Descargas</h1>
+          <button id="clearDone" class="text-btn" type="button" hidden>Limpiar</button>
+        </div>
+        <ul id="queue" class="queue"></ul>
+        <div id="empty" class="empty">
+          <svg class="ico big"><use href="#i-tray"/></svg>
+          <p class="empty-t">Todavía no hay descargas</p>
+          <p class="empty-s">Pega un enlace en Nuevo y aparecerá aquí con su avance.</p>
+          <button id="goNew" class="tonal" type="button">Pegar un enlace</button>
+        </div>
       </div>
-
-      <div class="seg" role="group" aria-label="Formato">
-        <button class="seg-btn active" data-fmt="mp4">🎬 Video MP4</button>
-        <button class="seg-btn" data-fmt="mp3">🎵 Audio MP3</button>
-      </div>
-
-      <div id="qualityRow" class="field">
-        <label for="quality">Calidad máxima</label>
-        <select id="quality">
-          <option value="0">La mejor disponible</option>
-          <option value="2160">2160p (4K)</option>
-          <option value="1440">1440p</option>
-          <option value="1080" selected>1080p (Full HD)</option>
-          <option value="720">720p (HD)</option>
-          <option value="480">480p</option>
-          <option value="360">360p</option>
-        </select>
-      </div>
-
-      <label class="check"><input type="checkbox" id="skipHist" checked> Omitir videos ya descargados</label>
-      <label class="check"><input type="checkbox" id="allowList"> Permitir listas de reproducción completas</label>
-
-      <div class="actions">
-        <button id="startBtn" class="btn primary" disabled>⬇️ Descargar</button>
-        <button id="cancelAllBtn" class="btn danger" hidden>⛔ Cancelar todo</button>
+      <div class="actionbar" id="cancelBar" hidden>
+        <button id="cancelAllBtn" class="primary danger" type="button">Cancelar todo</button>
       </div>
     </section>
 
-    <section class="card" id="queueCard" hidden>
-      <h2>Descargas</h2>
-      <ul id="queue" class="queue"></ul>
-    </section>
+    <!-- Ajustes -->
+    <section id="s-set" class="screen" aria-labelledby="t-set">
+      <div class="scroll">
+        <h1 id="t-set" class="title">Ajustes</h1>
 
-    <section class="card">
-      <details>
-        <summary>Consola</summary>
-        <pre id="console" aria-live="polite"></pre>
-      </details>
-    </section>
+        <h2 class="group">Motor de descarga</h2>
+        <ul class="list">
+          <li class="row">
+            <div class="row-main">
+              <span class="row-t">yt-dlp</span>
+              <span id="engineText" class="row-s">Preparando…</span>
+            </div>
+            <button id="updateBtn" class="text-btn" type="button" disabled>Actualizar</button>
+          </li>
+        </ul>
+        <p class="note">Se actualiza solo cada dos días. Si un sitio cambia y falla una descarga, se actualiza y reintenta.</p>
 
-    <section class="card">
-      <div class="row between">
-        <span>Historial: <b id="histCount">0</b> videos</span>
-        <button id="clearHist" class="chip">Borrar historial</button>
+        <h2 class="group">Apariencia</h2>
+        <div class="seg three" role="radiogroup" aria-label="Tema">
+          <button type="button" role="radio" class="seg-btn" data-theme="auto">Automático</button>
+          <button type="button" role="radio" class="seg-btn" data-theme="light">Claro</button>
+          <button type="button" role="radio" class="seg-btn" data-theme="dark">Oscuro</button>
+        </div>
+
+        <h2 class="group">Datos</h2>
+        <ul class="list">
+          <li class="row">
+            <div class="row-main">
+              <span class="row-t">Historial</span>
+              <span id="histText" class="row-s">0 videos</span>
+            </div>
+            <button id="clearHist" class="text-btn" type="button">Borrar</button>
+          </li>
+          <li class="row">
+            <div class="row-main">
+              <span class="row-t">Carpeta de destino</span>
+              <span class="row-s">Descargas/VideoDownloaderPro</span>
+            </div>
+          </li>
+        </ul>
+
+        <h2 class="group">Registro</h2>
+        <details class="log">
+          <summary>Ver detalles técnicos</summary>
+          <pre id="console" aria-live="polite"></pre>
+        </details>
+
+        <p class="note foot">Versión 1.1. Descarga solo contenido propio o que tengas permiso de guardar.</p>
       </div>
-      <p class="hint">Los archivos se guardan en <b>Descargas/VideoDownloaderPro</b>. Mantén la app abierta mientras descarga.</p>
     </section>
-
-    <footer>Úsalo solo con contenido propio o que tengas permiso de descargar.</footer>
   </main>
 
-  <div id="toast" class="toast" hidden></div>
-  <script src="app.js"></script>
+  <nav class="tabs" aria-label="Secciones">
+    <button class="tab active" type="button" data-tab="new">
+      <span class="pill"><svg class="ico"><use href="#i-plus"/></svg></span>
+      <span class="tab-l">Nuevo</span>
+    </button>
+    <button class="tab" type="button" data-tab="dl">
+      <span class="pill">
+        <svg class="ico"><use href="#i-tray"/></svg>
+        <b id="badge" class="badge" hidden>0</b>
+      </span>
+      <span class="tab-l">Descargas</span>
+    </button>
+    <button class="tab" type="button" data-tab="set">
+      <span class="pill"><svg class="ico"><use href="#i-sliders"/></svg></span>
+      <span class="tab-l">Ajustes</span>
+    </button>
+  </nav>
+</div>
+
+<div id="toast" class="toast" role="status" hidden></div>
+<script src="app.js"></script>
 </body>
 </html>
