@@ -12,6 +12,7 @@
   --tint: rgba(43, 84, 240, .13);
   --danger: #c62f3b;
   --danger-tint: rgba(198, 47, 59, .10);
+  --on-danger: #ffffff;
   --ok: #1b8a5a;
   --nav: #ffffff;
   --press: rgba(18, 22, 28, .06);
@@ -31,6 +32,7 @@
     --tint: rgba(124, 155, 255, .17);
     --danger: #ff8a93;
     --danger-tint: rgba(255, 138, 147, .12);
+    --on-danger: #2a0a0e;
     --ok: #5fd3a0;
     --nav: #141922;
     --press: rgba(232, 236, 242, .08);
@@ -50,6 +52,7 @@
   --tint: rgba(124, 155, 255, .17);
   --danger: #ff8a93;
   --danger-tint: rgba(255, 138, 147, .12);
+  --on-danger: #2a0a0e;
   --ok: #5fd3a0;
   --nav: #141922;
   --press: rgba(232, 236, 242, .08);
@@ -310,6 +313,8 @@ label.row:active, .row.pick:active { background: var(--press); }
 .dl.error::before { width: 100%; background: var(--danger-tint); }
 .dl.cancelled, .dl.skipped { opacity: .7; }
 .dl.done::before { display: none; }
+.dl[data-open] { cursor: pointer; }
+.dl[data-open]:active { background: var(--surface-2); }
 
 .empty {
   display: flex; flex-direction: column; align-items: center; text-align: center;
@@ -370,8 +375,31 @@ label.row:active, .row.pick:active { background: var(--press); }
   max-width: 440px; margin: 0 auto;
   background: var(--ink); color: var(--bg);
   padding: 14px 18px; border-radius: 14px;
-  font-size: 14px; z-index: 20;
+  font-size: 14px; z-index: 40;
 }
+
+/* ---------- menú inferior ---------- */
+.sheet-wrap { position: fixed; inset: 0; z-index: 30; display: flex; align-items: flex-end; }
+.scrim { position: absolute; inset: 0; background: rgba(0, 0, 0, .5); animation: fade .18s ease-out; }
+.sheet {
+  position: relative; width: 100%;
+  background: var(--surface);
+  border-radius: 28px 28px 0 0;
+  padding: 10px 16px calc(18px + env(safe-area-inset-bottom, 0px));
+  animation: rise .22s cubic-bezier(.2, .8, .2, 1);
+}
+.grab { width: 36px; height: 4px; border-radius: 2px; background: var(--line); margin: 0 auto 16px; }
+.sheet-t {
+  margin: 0 4px 4px; font-size: 17px; font-weight: 600;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  word-break: break-word;
+}
+.sheet-s { margin: 0 4px 18px; font-size: 13px; color: var(--muted); word-break: break-word; }
+.sheet-actions { display: grid; gap: 8px; }
+.primary.solid-danger { background: var(--danger); color: var(--on-danger); }
+.primary.quiet { background: var(--surface-2); color: var(--ink); }
+@keyframes fade { from { opacity: 0; } }
+@keyframes rise { from { transform: translateY(40px); opacity: 0; } }
 
 @media (prefers-reduced-motion: reduce) {
   * { transition: none !important; animation-duration: .01ms !important; }

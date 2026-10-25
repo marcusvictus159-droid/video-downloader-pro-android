@@ -1,6 +1,10 @@
 package com.videodownloader.pro
 
+import android.content.ActivityNotFoundException
+import android.content.ClipData
 import android.content.ContentValues
+import android.content.Intent
+import android.net.Uri
 import android.os.Environment
 import android.provider.MediaStore
 import android.webkit.MimeTypeMap
@@ -211,8 +215,12 @@ class YtDlpPlugin : Plugin() {
             state.progress = 100f
 
             val files = JSArray()
-            saved.forEach { files.put(it) }
-            call.resolve(JSObject().put("files", files))
+            val items = JSArray()
+            saved.forEach {
+                files.put(it.getString("path"))
+                items.put(it)
+            }
+            call.resolve(JSObject().put("files", files).put("items", items))
         } catch (e: Exception) {
             if (cancelled.contains(id)) {
                 call.resolve(JSObject().put("cancelled", true))
@@ -315,25 +323,84 @@ class YtDlpPlugin : Plugin() {
         call.resolve(JSObject().put("text", t ?: ""))
     }
 
+    // ------------------------------------------- abrir / eliminar archivos
+
+    private fun exists(uri: Uri): Boolean {
+        return try {
+            context.contentResolver.query(uri, arrayOf(MediaStore.MediaColumns._ID), null, null, null)
+                ?.use { it.count > 0 } ?: false
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /** Abre el archivo con el selector de apps de Android (reproductores instalados). */
+    @PluginMethod
+    fun openFile(call: PluginCall) {
+        val uriStr = call.getString("uri")
+        if (uriStr.isNullOrBlank()) {
+            call.reject("Falta el archivo")
+            return
+        }
+        val uri = Uri.parse(uriStr)
+        if (!exists(uri)) {
+            call.reject("El archivo ya no existe en el teléfono")
+            return
+        }
+        val mime = call.getString("mime") ?: "video/*"
+        val view = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, mime)
+            clipData = ClipData.newRawUri("", uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        try {
+            val chooser = Intent.createChooser(view, "Abrir con")
+            chooser.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+            activity.startActivity(chooser)
+            call.resolve()
+        } catch (e: ActivityNotFoundException) {
+            call.reject("No hay una app instalada para abrir este archivo")
+        } catch (e: Exception) {
+            call.reject("No se pudo abrir: " + shortMsg(e))
+        }
+    }
+
+    @PluginMethod
+    fun deleteFile(call: PluginCall) {
+        val uriStr = call.getString("uri")
+        if (uriStr.isNullOrBlank()) {
+            call.reject("Falta el archivo")
+            return
+        }
+        try {
+            val rows = context.contentResolver.delete(Uri.parse(uriStr), null, null)
+            call.resolve(JSObject().put("deleted", rows > 0))
+        } catch (e: SecurityException) {
+            call.reject("Android no deja que la app borre este archivo. Bórralo desde la app Archivos.")
+        } catch (e: Exception) {
+            call.reject("No se pudo eliminar: " + shortMsg(e))
+        }
+    }
+
     // ------------------------------------------------- guardado en Descargas
 
     private val allowedExt = setOf("mp4", "mkv", "webm", "mov", "mp3", "m4a", "aac", "opus", "ogg", "flac", "wav")
 
-    private fun saveOutputs(dir: File, state: DlState): List<String> {
-        val result = ArrayList<String>()
+    private fun saveOutputs(dir: File, state: DlState): List<JSObject> {
+        val result = ArrayList<JSObject>()
         val files = dir.walkTopDown()
             .filter { it.isFile && allowedExt.contains(it.extension.lowercase()) }
             .toList()
         for (f in files) {
-            val shown = saveToDownloads(f)
-            state.log("💾 Guardado: $shown")
-            result.add(shown)
+            val saved = saveToDownloads(f)
+            state.log("💾 Guardado: " + saved.getString("path"))
+            result.add(saved)
         }
         return result
     }
 
     /** Copia el archivo a Descargas/VideoDownloaderPro usando MediaStore (sin permisos extra, Android 10+). */
-    private fun saveToDownloads(file: File): String {
+    private fun saveToDownloads(file: File): JSObject {
         val mime = MimeTypeMap.getSingleton()
             .getMimeTypeFromExtension(file.extension.lowercase()) ?: "application/octet-stream"
         val resolver = context.contentResolver
@@ -355,7 +422,11 @@ class YtDlpPlugin : Plugin() {
             resolver.delete(uri, null, null)
             throw e
         }
-        return "Descargas/VideoDownloaderPro/" + file.name
+        return JSObject()
+            .put("uri", uri.toString())
+            .put("path", "Descargas/VideoDownloaderPro/" + file.name)
+            .put("name", file.name)
+            .put("mime", mime)
     }
 
     private fun shortMsg(e: Throwable): String {

@@ -164,7 +164,8 @@
   const AppPlugin = nativePlugin('App');
   if (AppPlugin && AppPlugin.addListener) {
     AppPlugin.addListener('backButton', () => {
-      if (state.tab !== 'new') showTab('new');
+      if (!$('#sheet').hidden) closeSheet();
+      else if (state.tab !== 'new') showTab('new');
       else if (AppPlugin.exitApp) AppPlugin.exitApp();
     });
   }
@@ -357,7 +358,7 @@
         const eta = fmtEta(i.eta);
         return eta ? 'Faltan ' + eta : 'Descargando';
       }
-      case 'done': return 'Guardado en ' + (i.files && i.files[0] ? i.files[0].replace(/\/[^/]*$/, '') : 'Descargas');
+      case 'done': return i.uri ? 'Listo · toca para abrir o eliminar' : 'Listo';
       case 'error': return i.error || 'Error desconocido';
       case 'cancelled': return 'Cancelada';
       case 'skipped': return 'Ya estaba en el historial';
@@ -381,7 +382,8 @@
 
   function rowHtml(i) {
     const p = i.status === 'done' ? 100 : Math.max(0, Math.min(100, i.progress || 0));
-    return '<li class="dl ' + i.status + '" data-id="' + i.id + '" style="--p:' + p + '%">' +
+    const open = i.status === 'done' && i.uri ? ' data-open="' + i.id + '" role="button" tabindex="0"' : '';
+    return '<li class="dl ' + i.status + '" data-id="' + i.id + '"' + open + ' style="--p:' + p + '%">' +
       '<span class="dl-ico">' + icon(i.opts.format === 'mp3' ? 'music' : 'film') + '</span>' +
       '<div class="dl-body"><span class="dl-t">' + esc(i.title || i.url) + '</span>' +
       '<span class="dl-s">' + esc(statusText(i)) + '</span></div>' +
@@ -490,8 +492,20 @@
         item.status = 'done';
         item.progress = 100;
         item.files = (res && res.files) || [];
-        if (!item.title && item.files[0]) item.title = item.files[0].split('/').pop().replace(/\.[^.]+$/, '');
+        const outs = (res && res.items) || [];
+        if (outs[0]) applyOut(item, outs[0]);
+        else if (!item.title && item.files[0]) item.title = item.files[0].split('/').pop().replace(/\.[^.]+$/, '');
+        // Listas de reproducción: cada archivo adicional queda como su propia fila.
+        outs.slice(1).forEach((o) => {
+          const extra = {
+            id: 'dl_' + Date.now() + '_' + (seq++), url: item.url, key: item.key + '#' + o.name,
+            progress: 100, eta: 0, logIdx: 0, opts: item.opts, status: 'done', files: [o.path],
+          };
+          applyOut(extra, o);
+          state.queue.push(extra);
+        });
         addHistory(item);
+        persistLibrary();
         log('Listo: ' + (item.title || item.url));
       }
     } catch (e) {
@@ -517,7 +531,14 @@
 
   $('#queue').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-cancel]');
-    if (btn) cancelItem(btn.dataset.cancel);
+    if (btn) { cancelItem(btn.dataset.cancel); return; }
+    const row = e.target.closest('[data-open]');
+    if (row) openSheet(state.queue.find((i) => i.id === row.dataset.open));
+  });
+  $('#queue').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const row = e.target.closest('[data-open]');
+    if (row) { e.preventDefault(); openSheet(state.queue.find((i) => i.id === row.dataset.open)); }
   });
 
   $('#cancelAllBtn').addEventListener('click', async () => {
@@ -529,12 +550,121 @@
 
   $('#clearDone').addEventListener('click', () => {
     state.queue = state.queue.filter(isActive);
+    persistLibrary();
     renderQueue();
+  });
+
+  // ------------------------------------------- archivos descargados
+  function applyOut(it, o) {
+    it.uri = o.uri;
+    it.mime = o.mime;
+    it.path = o.path;
+    it.files = [o.path];
+    const name = String(o.name || '').replace(/\.[^.]+$/, '');
+    if (name) it.title = name;
+  }
+
+  // Las descargas terminadas se recuerdan para poder abrirlas o borrarlas después.
+  function persistLibrary() {
+    const list = state.queue
+      .filter((i) => i.status === 'done' && i.uri)
+      .slice(-60)
+      .map((i) => ({
+        id: i.id, url: i.url, key: i.key, title: i.title,
+        uri: i.uri, mime: i.mime, path: i.path, format: i.opts && i.opts.format,
+      }));
+    store.set('library', list);
+  }
+
+  function restoreLibrary() {
+    store.get('library', []).forEach((l) => {
+      if (!l || !l.uri) return;
+      state.queue.push({
+        id: l.id, url: l.url || '', key: l.key || '', title: l.title || '',
+        uri: l.uri, mime: l.mime, path: l.path, files: [l.path],
+        status: 'done', progress: 100, eta: 0, logIdx: 0,
+        opts: { format: l.format || 'mp4' },
+      });
+    });
+  }
+
+  function removeItem(item) {
+    state.queue = state.queue.filter((i) => i !== item);
+    persistLibrary();
+    renderQueue();
+  }
+
+  const sheet = { item: null, step: 'main' };
+
+  function openSheet(item) {
+    if (!item) return;
+    sheet.item = item;
+    sheet.step = 'main';
+    renderSheet();
+    $('#sheet').hidden = false;
+  }
+  function closeSheet() {
+    $('#sheet').hidden = true;
+    sheet.item = null;
+  }
+  function renderSheet() {
+    const it = sheet.item;
+    if (!it) return;
+    $('#sheetTitle').textContent = it.title || 'Video';
+    const acts = $('#sheetActions');
+    if (sheet.step === 'main') {
+      $('#sheetSub').textContent = it.path || '';
+      acts.innerHTML =
+        '<button class="primary" type="button" data-act="open">Abrir con…</button>' +
+        '<button class="primary danger" type="button" data-act="ask">Eliminar del teléfono</button>';
+    } else {
+      $('#sheetSub').textContent = 'Se borrará el archivo del teléfono. Esta acción no se puede deshacer.';
+      acts.innerHTML =
+        '<button class="primary solid-danger" type="button" data-act="del">Eliminar</button>' +
+        '<button class="primary quiet" type="button" data-act="back">Cancelar</button>';
+    }
+  }
+
+  $('#scrim').addEventListener('click', closeSheet);
+  $('#sheetActions').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-act]');
+    const it = sheet.item;
+    if (!btn || !it) return;
+    const act = btn.dataset.act;
+
+    if (act === 'ask') { sheet.step = 'confirm'; renderSheet(); return; }
+    if (act === 'back') { sheet.step = 'main'; renderSheet(); return; }
+
+    if (act === 'open') {
+      try {
+        await YtDlp.openFile({ uri: it.uri, mime: it.mime });
+        closeSheet();
+      } catch (err) {
+        const msg = (err && err.message) || 'No se pudo abrir el archivo';
+        toast(msg);
+        if (/ya no existe/i.test(msg)) { closeSheet(); removeItem(it); }
+      }
+      return;
+    }
+
+    if (act === 'del') {
+      try {
+        const r = await YtDlp.deleteFile({ uri: it.uri });
+        closeSheet();
+        removeItem(it);
+        toast(r && r.deleted === false ? 'El archivo ya no estaba en el teléfono' : 'Video eliminado');
+      } catch (err) {
+        toast((err && err.message) || 'No se pudo eliminar');
+        sheet.step = 'main';
+        renderSheet();
+      }
+    }
   });
 
   // -------------------------------------------------------------- arranque
   applyTheme();
   applyFormat();
+  restoreLibrary();
   renderHistory();
   renderEngine();
   renderQueue();

@@ -156,7 +156,7 @@
           <pre id="console" aria-live="polite"></pre>
         </details>
 
-        <p class="note foot">Versión 1.1. Descarga solo contenido propio o que tengas permiso de guardar.</p>
+        <p class="note foot">Versión 1.2. Descarga solo contenido propio o que tengas permiso de guardar.</p>
       </div>
     </section>
   </main>
@@ -181,6 +181,16 @@
 </div>
 
 <div id="toast" class="toast" role="status" hidden></div>
+
+<div id="sheet" class="sheet-wrap" hidden>
+  <div id="scrim" class="scrim"></div>
+  <div class="sheet" role="dialog" aria-modal="true" aria-labelledby="sheetTitle">
+    <div class="grab" aria-hidden="true"></div>
+    <p id="sheetTitle" class="sheet-t"></p>
+    <p id="sheetSub" class="sheet-s"></p>
+    <div id="sheetActions" class="sheet-actions"></div>
+  </div>
+</div>
 <script src="app.js"></script>
 </body>
 </html>
