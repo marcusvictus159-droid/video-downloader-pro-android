@@ -316,14 +316,16 @@ class YtDlpPlugin : Plugin() {
         call.resolve()
     }
 
-    /** Abre el navegador de YouTube (pantalla nativa con botón flotante). */
+    /** Abre el navegador de un sitio (pantalla nativa con botón flotante de descarga). */
     @PluginMethod
     fun openBrowser(call: PluginCall) {
         try {
-            activity.startActivity(Intent(activity, BrowserActivity::class.java))
+            val intent = Intent(activity, BrowserActivity::class.java)
+            intent.putExtra("site", call.getString("site") ?: "youtube")
+            activity.startActivity(intent)
             call.resolve()
         } catch (e: Exception) {
-            call.reject("No se pudo abrir YouTube: " + shortMsg(e))
+            call.reject("No se pudo abrir el navegador: " + shortMsg(e))
         }
     }
 

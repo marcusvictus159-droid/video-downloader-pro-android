@@ -39,6 +39,19 @@ class BrowserActivity : AppCompatActivity() {
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
 
+    private data class Site(val id: String, val title: String, val start: String, val hosts: List<String>)
+
+    private val sites = listOf(
+        Site("youtube", "YouTube", "https://m.youtube.com/", listOf("youtube.com", "youtu.be")),
+        Site("facebook", "Facebook", "https://m.facebook.com/", listOf("facebook.com", "fb.watch")),
+        Site("tiktok", "TikTok", "https://www.tiktok.com/", listOf("tiktok.com")),
+        Site("instagram", "Instagram", "https://www.instagram.com/", listOf("instagram.com")),
+        Site("x", "X", "https://x.com/", listOf("x.com", "twitter.com")),
+        Site("vimeo", "Vimeo", "https://vimeo.com/", listOf("vimeo.com"))
+    ).associateBy { it.id }
+
+    private lateinit var site: Site
+
     private var currentLink: String? = null
     private val added = LinkedHashSet<String>()
 
@@ -55,6 +68,8 @@ class BrowserActivity : AppCompatActivity() {
     @Suppress("DEPRECATION")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        site = sites[intent.getStringExtra("site")] ?: sites.getValue("youtube")
 
         dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
             Configuration.UI_MODE_NIGHT_YES
@@ -88,7 +103,7 @@ class BrowserActivity : AppCompatActivity() {
         bar.addView(close, LinearLayout.LayoutParams(dp(52), dp(56)))
 
         val title = TextView(this).apply {
-            text = "YouTube"
+            text = site.title
             setTextColor(ink)
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
             setTypeface(typeface, android.graphics.Typeface.BOLD)
@@ -155,7 +170,7 @@ class BrowserActivity : AppCompatActivity() {
             }
         })
 
-        web.loadUrl(savedInstanceState?.getString("url") ?: "https://m.youtube.com/")
+        web.loadUrl(savedInstanceState?.getString("url") ?: site.start)
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -229,28 +244,60 @@ class BrowserActivity : AppCompatActivity() {
 
     // ------------------------------------------------------ enlaces de video
 
-    /** Devuelve el enlace limpio si la página es un video de YouTube; si no, null. */
+    private fun hostMatches(host: String): Boolean =
+        site.hosts.any { host == it || host.endsWith(".$it") }
+
+    private fun clean(u: Uri): String = u.buildUpon().fragment(null).build().toString()
+
+    /** Devuelve el enlace del video si la página abierta es un video del sitio; si no, null. */
     private fun videoLink(raw: String?): String? {
         if (raw.isNullOrBlank()) return null
         val u = try { Uri.parse(raw) } catch (e: Exception) { return null }
         val host = (u.host ?: return null).lowercase()
-
-        if (host == "youtu.be") {
-            val id = u.pathSegments.firstOrNull()
-            return if (!id.isNullOrBlank()) "https://www.youtube.com/watch?v=$id" else null
-        }
-        if (host != "youtube.com" && !host.endsWith(".youtube.com")) return null
-
+        if (!hostMatches(host)) return null
+        val segs = u.pathSegments
         val path = u.path ?: ""
-        if (path == "/watch") {
-            val v = u.getQueryParameter("v")
-            return if (!v.isNullOrBlank()) "https://www.youtube.com/watch?v=$v" else null
+
+        return when (site.id) {
+            "youtube" -> when {
+                host == "youtu.be" -> {
+                    val id = segs.firstOrNull()
+                    if (!id.isNullOrBlank()) "https://www.youtube.com/watch?v=$id" else null
+                }
+                path == "/watch" -> {
+                    val v = u.getQueryParameter("v")
+                    if (!v.isNullOrBlank()) "https://www.youtube.com/watch?v=$v" else null
+                }
+                path.startsWith("/shorts/") -> {
+                    val id = segs.getOrNull(1)
+                    if (!id.isNullOrBlank()) "https://www.youtube.com/shorts/$id" else null
+                }
+                else -> null
+            }
+            "facebook" -> when {
+                host == "fb.watch" || host.endsWith(".fb.watch") -> if (segs.isNotEmpty()) clean(u) else null
+                path.startsWith("/watch") -> {
+                    val v = u.getQueryParameter("v")
+                    if (!v.isNullOrBlank()) "https://www.facebook.com/watch/?v=$v" else null
+                }
+                path.contains("/videos/") || path.contains("/reel/") -> clean(u)
+                else -> null
+            }
+            "tiktok" ->
+                if (path.contains("/video/") || ((host.startsWith("vm.") || host.startsWith("vt.")) && segs.isNotEmpty()))
+                    clean(u) else null
+            "instagram" ->
+                if (segs.size >= 2 && segs[0] in listOf("reel", "reels", "p", "tv")) clean(u) else null
+            "x" -> {
+                val i = segs.indexOf("status")
+                val id = segs.getOrNull(i + 1)
+                if (i >= 0 && !id.isNullOrEmpty() && id.all { it.isDigit() })
+                    "https://x.com/" + segs.take(i + 2).joinToString("/") else null
+            }
+            "vimeo" ->
+                if (segs.any { it.length >= 6 && it.all { c -> c.isDigit() } }) clean(u) else null
+            else -> null
         }
-        if (path.startsWith("/shorts/")) {
-            val id = u.pathSegments.getOrNull(1)
-            return if (!id.isNullOrBlank()) "https://www.youtube.com/shorts/$id" else null
-        }
-        return null
     }
 
     private fun onUrl(url: String?) {

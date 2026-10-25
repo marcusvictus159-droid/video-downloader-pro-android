@@ -447,13 +447,32 @@
     enqueueUrls(urls);
   });
 
-  // ------------------------------------------------- navegador de YouTube
-  $('#ytBtn').addEventListener('click', async () => {
+  // -------------------------------------------------- navegador por sitio
+  const SITES = [
+    { id: 'youtube', name: 'YouTube', letter: 'Y', h: 2 },
+    { id: 'facebook', name: 'Facebook', letter: 'f', h: 214 },
+    { id: 'tiktok', name: 'TikTok', letter: 'T', h: 172 },
+    { id: 'instagram', name: 'Instagram', letter: 'I', h: 322 },
+    { id: 'x', name: 'X', letter: 'X', h: 220, s: 10 },
+    { id: 'vimeo', name: 'Vimeo', letter: 'V', h: 196 },
+  ];
+
+  // Si existe www/icons/<sitio>.png se muestra encima de la letra.
+  $('#sites').innerHTML = SITES.map((s) =>
+    '<button class="site" type="button" role="listitem" data-site="' + s.id + '">' +
+    '<span class="site-ico" style="--h:' + s.h + (s.s != null ? ';--s:' + s.s + '%' : '') + '">' +
+    '<b>' + s.letter + '</b><img src="icons/' + s.id + '.png" alt="" onerror="this.remove()"></span>' +
+    '<span class="site-l">' + s.name + '</span></button>'
+  ).join('');
+
+  $('#sites').addEventListener('click', async (e) => {
+    const btn = e.target.closest('[data-site]');
+    if (!btn) return;
     if (!YtDlp) { toast('Solo está disponible en la app de Android'); return; }
     try {
-      await YtDlp.openBrowser();
-    } catch (e) {
-      toast((e && e.message) || 'No se pudo abrir YouTube');
+      await YtDlp.openBrowser({ site: btn.dataset.site });
+    } catch (err) {
+      toast((err && err.message) || 'No se pudo abrir el navegador');
     }
   });
 

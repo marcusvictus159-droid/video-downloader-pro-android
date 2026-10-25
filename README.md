@@ -31,6 +31,9 @@ scripts/patch_android.py   parchea el proyecto Android generado por Capacitor
 ```
 `android/` no se sube: se genera en cada compilación con `npx cap add android` + el parche.
 
+## Iconos de los sitios
+La tira «Navegar y descargar» usa una letra por sitio. Para mostrar tus propios iconos, copia PNG cuadrados a `www/icons/` con el nombre del sitio (`youtube.png`, `facebook.png`, `tiktok.png`, `instagram.png`, `x.png`, `vimeo.png`) y se verán automáticamente.
+
 ## Cambiar el icono
 Reemplaza los PNG de 1024x1024 en `assets/` (`icon-only.png`, `icon-foreground.png` con fondo transparente e `icon-background.png`) y haz push: el workflow genera todos los tamaños.
 
