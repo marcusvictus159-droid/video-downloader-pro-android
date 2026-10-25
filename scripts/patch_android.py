@@ -85,8 +85,16 @@ if "kotlin-android" not in s:
     if n == 0:
         fail("no se encontró 'apply plugin: com.android.application'")
 
-m = re.search(r"JavaVersion\.VERSION_(\d+)", s)
-jvm = m.group(1) if m else "17"
+# Capacitor 7 define la versión de Java en capacitor.build.gradle (no en app/build.gradle).
+jvm = None
+for gradle_file in (app_gradle, APP / "capacitor.build.gradle"):
+    if gradle_file.exists():
+        m = re.search(r"JavaVersion\.VERSION_(\d+)", read(gradle_file))
+        if m:
+            jvm = m.group(1)
+            break
+if jvm is None:
+    jvm = "21"
 
 if "useLegacyPackaging" not in s:
     block = (
