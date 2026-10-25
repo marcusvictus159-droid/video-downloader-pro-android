@@ -40,9 +40,15 @@ if not APP.is_dir():
 # 1) Código nativo -----------------------------------------------------------
 java_dir = APP / "src" / "main" / "java" / pathlib.Path(*PKG.split("."))
 java_dir.mkdir(parents=True, exist_ok=True)
-for name in ("YtDlpPlugin.kt", "SharedStore.java", "MainActivity.java"):
+for name in ("YtDlpPlugin.kt", "BrowserActivity.kt", "SharedStore.java", "MainActivity.java"):
     shutil.copy2(NATIVE / name, java_dir / name)
 print("[ok] código nativo copiado a", java_dir)
+
+# Iconos vectoriales del navegador de YouTube
+res_src = NATIVE / "res"
+if res_src.is_dir():
+    shutil.copytree(res_src, APP / "src" / "main" / "res", dirs_exist_ok=True)
+    print("[ok] recursos copiados (drawables)")
 
 # 2) minSdk ------------------------------------------------------------------
 variables = ANDROID / "variables.gradle"
@@ -152,8 +158,21 @@ if "android.intent.action.SEND" not in s:
     if n == 0:
         fail("no se encontró </activity> en el manifest")
 
+if "BrowserActivity" not in s:
+    activity = (
+        '    <activity\n'
+        '        android:name=".BrowserActivity"\n'
+        '        android:exported="false"\n'
+        '        android:theme="@style/AppTheme.NoActionBar"\n'
+        '        android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode|density" />\n'
+        '    '
+    )
+    s, n = re.subn(r"</application>", lambda _m: activity + "</application>", s, count=1)
+    if n == 0:
+        fail("no se encontró </application> en el manifest")
+
 write(manifest, s)
-print("[ok] AndroidManifest (nativeLibs + compartir enlaces)")
+print("[ok] AndroidManifest (nativeLibs + compartir enlaces + navegador)")
 # 6) Estilos: la app dibuja dentro de las barras del sistema (sin edge-to-edge forzado en Android 15)
 styles = APP / "src" / "main" / "res" / "values" / "styles.xml"
 if styles.exists():

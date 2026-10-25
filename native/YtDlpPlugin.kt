@@ -316,6 +316,28 @@ class YtDlpPlugin : Plugin() {
         call.resolve()
     }
 
+    /** Abre el navegador de YouTube (pantalla nativa con botón flotante). */
+    @PluginMethod
+    fun openBrowser(call: PluginCall) {
+        try {
+            activity.startActivity(Intent(activity, BrowserActivity::class.java))
+            call.resolve()
+        } catch (e: Exception) {
+            call.reject("No se pudo abrir YouTube: " + shortMsg(e))
+        }
+    }
+
+    /** Entrega (y vacía) los enlaces agregados desde el navegador de YouTube. */
+    @PluginMethod
+    fun takePending(call: PluginCall) {
+        val arr = JSArray()
+        synchronized(SharedStore.pending) {
+            SharedStore.pending.forEach { arr.put(it) }
+            SharedStore.pending.clear()
+        }
+        call.resolve(JSObject().put("urls", arr))
+    }
+
     @PluginMethod
     fun getSharedText(call: PluginCall) {
         val t = SharedStore.text

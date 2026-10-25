@@ -410,10 +410,8 @@
     else if (item.progress > 0) renderQueue();
   }
 
-  $('#startBtn').addEventListener('click', () => {
-    const urls = extractUrls($('#urls').value);
-    if (!urls.length) return;
-
+  // Agrega enlaces a la cola con los ajustes actuales y arranca las descargas.
+  function enqueueUrls(urls) {
     const opts = {
       format: state.format,
       maxHeight: parseInt(quality.value, 10) || 0,
@@ -434,13 +432,45 @@
       }
     });
 
-    $('#urls').value = '';
-    syncField();
     renderQueue();
     showTab('dl');
     if (added) runQueue();
-    else toast('Todos esos videos ya estaban descargados');
+    else toast(urls.length === 1 ? 'Ese video ya estaba descargado' : 'Todos esos videos ya estaban descargados');
+    return added;
+  }
+
+  $('#startBtn').addEventListener('click', () => {
+    const urls = extractUrls($('#urls').value);
+    if (!urls.length) return;
+    $('#urls').value = '';
+    syncField();
+    enqueueUrls(urls);
   });
+
+  // ------------------------------------------------- navegador de YouTube
+  $('#ytBtn').addEventListener('click', async () => {
+    if (!YtDlp) { toast('Solo está disponible en la app de Android'); return; }
+    try {
+      await YtDlp.openBrowser();
+    } catch (e) {
+      toast((e && e.message) || 'No se pudo abrir YouTube');
+    }
+  });
+
+  // Recoge los videos agregados desde el navegador al volver a la app.
+  async function checkPending() {
+    if (!YtDlp || !state.ready) return;
+    try {
+      const r = await YtDlp.takePending();
+      const urls = (r && r.urls) || [];
+      if (urls.length) enqueueUrls(urls);
+    } catch (e) { /* nada pendiente */ }
+  }
+  setInterval(() => {
+    if (document.hidden) return;
+    checkPending();
+    checkShared();
+  }, 1500);
 
   async function runQueue() {
     if (state.running) return;
@@ -652,6 +682,9 @@
         const r = await YtDlp.deleteFile({ uri: it.uri });
         closeSheet();
         removeItem(it);
+        history = history.filter((h) => h.key !== it.key);
+        store.set('history', history);
+        renderHistory();
         toast(r && r.deleted === false ? 'El archivo ya no estaba en el teléfono' : 'Video eliminado');
       } catch (err) {
         toast((err && err.message) || 'No se pudo eliminar');

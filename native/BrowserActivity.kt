@@ -1,0 +1,327 @@
+package com.videodownloader.pro
+
+import android.annotation.SuppressLint
+import android.content.res.Configuration
+import android.graphics.Color
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.os.Bundle
+import android.util.TypedValue
+import android.view.Gravity
+import android.view.View
+import android.view.ViewGroup
+import android.webkit.CookieManager
+import android.webkit.WebChromeClient
+import android.webkit.WebResourceRequest
+import android.webkit.WebView
+import android.webkit.WebViewClient
+import android.widget.FrameLayout
+import android.widget.ImageButton
+import android.widget.LinearLayout
+import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
+import androidx.appcompat.app.AppCompatActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+
+/**
+ * Navegador de YouTube dentro de la app. Muestra un botón flotante «Descargar»
+ * cuando la página abierta es un video; al tocarlo, el enlace se agrega a la cola.
+ */
+class BrowserActivity : AppCompatActivity() {
+
+    private lateinit var web: WebView
+    private lateinit var fab: TextView
+    private lateinit var doneBtn: TextView
+    private lateinit var fullContainer: FrameLayout
+
+    private var customView: View? = null
+    private var customCallback: WebChromeClient.CustomViewCallback? = null
+
+    private var currentLink: String? = null
+    private val added = LinkedHashSet<String>()
+
+    private var dark = false
+    private var bg = 0
+    private var ink = 0
+    private var accent = 0
+    private var onAccent = 0
+    private var mutedBg = 0
+
+    private fun dp(v: Int): Int =
+        TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, v.toFloat(), resources.displayMetrics).toInt()
+
+    @Suppress("DEPRECATION")
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+
+        dark = (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK) ==
+            Configuration.UI_MODE_NIGHT_YES
+        bg = if (dark) Color.parseColor("#0E1218") else Color.parseColor("#F2F4F8")
+        ink = if (dark) Color.parseColor("#E8ECF2") else Color.parseColor("#12161C")
+        accent = if (dark) Color.parseColor("#7C9BFF") else Color.parseColor("#2B54F0")
+        onAccent = if (dark) Color.parseColor("#0A1030") else Color.WHITE
+        mutedBg = if (dark) Color.parseColor("#2A3140") else Color.parseColor("#DDE2EA")
+
+        window.statusBarColor = bg
+        WindowInsetsControllerCompat(window, window.decorView).isAppearanceLightStatusBars = !dark
+
+        val rootFrame = FrameLayout(this)
+        rootFrame.setBackgroundColor(bg)
+
+        val column = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+
+        // ---- barra superior
+        val bar = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            setBackgroundColor(bg)
+        }
+        val close = ImageButton(this).apply {
+            setImageResource(R.drawable.ic_vdp_close)
+            drawable.mutate().setTint(ink)
+            setBackgroundColor(Color.TRANSPARENT)
+            contentDescription = "Cerrar"
+            setOnClickListener { finish() }
+        }
+        bar.addView(close, LinearLayout.LayoutParams(dp(52), dp(56)))
+
+        val title = TextView(this).apply {
+            text = "YouTube"
+            setTextColor(ink)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+        }
+        bar.addView(title, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+
+        doneBtn = TextView(this).apply {
+            setTextColor(accent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            setPadding(dp(14), dp(10), dp(14), dp(10))
+            visibility = View.GONE
+            setOnClickListener { finish() }
+        }
+        val doneLp = LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        doneLp.marginEnd = dp(6)
+        bar.addView(doneBtn, doneLp)
+
+        column.addView(bar, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(56)))
+
+        // ---- página + botón flotante
+        val body = FrameLayout(this)
+        web = WebView(this)
+        body.addView(web, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        fab = TextView(this).apply {
+            setTextColor(onAccent)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTypeface(typeface, android.graphics.Typeface.BOLD)
+            gravity = Gravity.CENTER_VERTICAL
+            compoundDrawablePadding = dp(10)
+            setPadding(dp(20), dp(15), dp(24), dp(15))
+            elevation = dp(8).toFloat()
+            visibility = View.GONE
+            setOnClickListener { addCurrent() }
+        }
+        val fabLp = FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        fabLp.gravity = Gravity.BOTTOM or Gravity.END
+        fabLp.setMargins(dp(16), dp(16), dp(16), dp(28))
+        body.addView(fab, fabLp)
+
+        column.addView(body, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        rootFrame.addView(column, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        // ---- contenedor de video en pantalla completa
+        fullContainer = FrameLayout(this).apply {
+            setBackgroundColor(Color.BLACK)
+            visibility = View.GONE
+        }
+        rootFrame.addView(fullContainer, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+
+        setContentView(rootFrame)
+        setupWebView()
+        renderFab()
+        updateDoneButton()
+
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
+            override fun handleOnBackPressed() {
+                when {
+                    customView != null -> hideCustomView()
+                    web.canGoBack() -> web.goBack()
+                    else -> finish()
+                }
+            }
+        })
+
+        web.loadUrl(savedInstanceState?.getString("url") ?: "https://m.youtube.com/")
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        outState.putString("url", web.url)
+    }
+
+    @SuppressLint("SetJavaScriptEnabled")
+    private fun setupWebView() {
+        val s = web.settings
+        s.javaScriptEnabled = true
+        s.domStorageEnabled = true
+        s.mediaPlaybackRequiresUserGesture = false
+        s.setSupportZoom(false)
+        s.builtInZoomControls = false
+
+        CookieManager.getInstance().setAcceptCookie(true)
+        CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
+
+        web.webViewClient = object : WebViewClient() {
+            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
+                val scheme = request.url.scheme ?: return true
+                // Esquemas como vnd.youtube: o intent: abrirían otras apps; se bloquean.
+                return scheme != "http" && scheme != "https"
+            }
+
+            override fun doUpdateVisitedHistory(view: WebView, url: String?, isReload: Boolean) {
+                super.doUpdateVisitedHistory(view, url, isReload)
+                onUrl(url)
+            }
+
+            override fun onPageFinished(view: WebView, url: String?) {
+                super.onPageFinished(view, url)
+                onUrl(url)
+            }
+        }
+
+        web.webChromeClient = object : WebChromeClient() {
+            override fun onShowCustomView(view: View, callback: CustomViewCallback) {
+                if (customView != null) {
+                    callback.onCustomViewHidden()
+                    return
+                }
+                customView = view
+                customCallback = callback
+                fullContainer.addView(
+                    view,
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
+                )
+                fullContainer.visibility = View.VISIBLE
+                val c = WindowInsetsControllerCompat(window, window.decorView)
+                c.systemBarsBehavior = WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+                c.hide(WindowInsetsCompat.Type.systemBars())
+            }
+
+            override fun onHideCustomView() {
+                hideCustomView()
+            }
+        }
+    }
+
+    private fun hideCustomView() {
+        val v = customView ?: return
+        fullContainer.removeView(v)
+        fullContainer.visibility = View.GONE
+        customView = null
+        customCallback?.onCustomViewHidden()
+        customCallback = null
+        WindowInsetsControllerCompat(window, window.decorView).show(WindowInsetsCompat.Type.systemBars())
+    }
+
+    // ------------------------------------------------------ enlaces de video
+
+    /** Devuelve el enlace limpio si la página es un video de YouTube; si no, null. */
+    private fun videoLink(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val u = try { Uri.parse(raw) } catch (e: Exception) { return null }
+        val host = (u.host ?: return null).lowercase()
+
+        if (host == "youtu.be") {
+            val id = u.pathSegments.firstOrNull()
+            return if (!id.isNullOrBlank()) "https://www.youtube.com/watch?v=$id" else null
+        }
+        if (host != "youtube.com" && !host.endsWith(".youtube.com")) return null
+
+        val path = u.path ?: ""
+        if (path == "/watch") {
+            val v = u.getQueryParameter("v")
+            return if (!v.isNullOrBlank()) "https://www.youtube.com/watch?v=$v" else null
+        }
+        if (path.startsWith("/shorts/")) {
+            val id = u.pathSegments.getOrNull(1)
+            return if (!id.isNullOrBlank()) "https://www.youtube.com/shorts/$id" else null
+        }
+        return null
+    }
+
+    private fun onUrl(url: String?) {
+        val link = videoLink(url)
+        if (link == currentLink) return
+        currentLink = link
+        runOnUiThread { renderFab() }
+    }
+
+    private fun addCurrent() {
+        val link = currentLink ?: return
+        if (added.contains(link)) return
+        added.add(link)
+        SharedStore.pending.add(link)
+        renderFab()
+        updateDoneButton()
+    }
+
+    private fun renderFab() {
+        val link = currentLink
+        if (link == null) {
+            fab.visibility = View.GONE
+            return
+        }
+        val already = added.contains(link)
+        fab.text = if (already) "Agregado" else "Descargar"
+        fab.setTextColor(if (already) ink else onAccent)
+
+        val icon = resources.getDrawable(if (already) R.drawable.ic_vdp_check else R.drawable.ic_vdp_download, theme).mutate()
+        icon.setTint(if (already) ink else onAccent)
+        icon.setBounds(0, 0, dp(22), dp(22))
+        fab.setCompoundDrawables(icon, null, null, null)
+
+        fab.background = GradientDrawable().apply {
+            shape = GradientDrawable.RECTANGLE
+            cornerRadius = dp(32).toFloat()
+            setColor(if (already) mutedBg else accent)
+        }
+        fab.isEnabled = !already
+        if (fab.visibility != View.VISIBLE) {
+            fab.alpha = 0f
+            fab.visibility = View.VISIBLE
+            fab.animate().alpha(1f).setDuration(160).start()
+        }
+    }
+
+    private fun updateDoneButton() {
+        val n = added.size
+        if (n == 0) {
+            doneBtn.visibility = View.GONE
+        } else {
+            doneBtn.text = if (n == 1) "Ver descargas (1)" else "Ver descargas ($n)"
+            doneBtn.visibility = View.VISIBLE
+        }
+    }
+
+    // ------------------------------------------------------------ ciclo de vida
+
+    override fun onResume() {
+        super.onResume()
+        web.onResume()
+    }
+
+    override fun onPause() {
+        web.onPause()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        (web.parent as? ViewGroup)?.removeView(web)
+        web.destroy()
+        super.onDestroy()
+    }
+}

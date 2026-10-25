@@ -140,6 +140,22 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .banner.error .spin { display: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* ---------- acceso a YouTube ---------- */
+.browse {
+  display: flex; align-items: center; gap: 14px;
+  width: 100%; text-align: left;
+  border: 0; border-radius: 18px;
+  background: var(--surface);
+  padding: 14px 16px; margin-bottom: 14px;
+}
+.browse:active { background: var(--surface-2); }
+.browse-ico {
+  width: 42px; height: 42px; flex: none; border-radius: 50%;
+  display: grid; place-items: center;
+  background: var(--tint); color: var(--accent);
+}
+.browse-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+
 /* ---------- campo de enlaces ---------- */
 .field { position: relative; margin-bottom: 14px; }
 .field textarea {
