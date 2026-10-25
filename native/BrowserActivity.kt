@@ -55,6 +55,7 @@ class BrowserActivity : AppCompatActivity() {
 
     private var currentLink: String? = null
     private var lastUrl: String? = null
+    private var picker: FormatPicker? = null
     private var fromShare = false
     private var shareTs = 0L
     private val added = LinkedHashSet<String>()
@@ -328,24 +329,40 @@ class BrowserActivity : AppCompatActivity() {
         val link = currentLink
         val fresh = !fromShare || (System.currentTimeMillis() - shareTs) < 90_000
         if (link != null && fresh) {
-            addLink(link)
+            choose(link)
             return
         }
         if (site.feed) resolveFromPage()
     }
 
-    private fun addLink(link: String) {
+    /** Muestra el menú para elegir video/MP3 y calidad antes de agregar el enlace. */
+    private fun choose(link: String) {
         if (added.contains(link)) {
             toast("Ese video ya está en la cola")
             return
         }
+        picker?.dismiss()
+        val p = FormatPicker(this, link, dark) { format, maxHeight, title ->
+            addLink(link, format, maxHeight, title)
+        }
+        picker = p
+        p.show()
+    }
+
+    private fun addLink(link: String, format: String, maxHeight: Int, title: String) {
+        if (added.contains(link)) return
         added.add(link)
-        SharedStore.pending.add(link)
+        val item = org.json.JSONObject()
+            .put("url", link)
+            .put("format", format)
+            .put("maxHeight", maxHeight)
+            .put("title", title)
+        SharedStore.pending.add(item.toString())
         if (fromShare) {
             fromShare = false
             currentLink = null
         }
-        toast("Agregado a las descargas")
+        toast(if (format == "mp3") "Audio agregado a las descargas" else "Video agregado a las descargas")
         renderFab()
         updateDoneButton()
     }
@@ -368,7 +385,7 @@ class BrowserActivity : AppCompatActivity() {
             }
             val f = found
             if (f != null) {
-                addLink(f)
+                choose(f)
             } else {
                 Toast.makeText(
                     this,
@@ -449,6 +466,7 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        picker?.dismiss()
         (web.parent as? ViewGroup)?.removeView(web)
         web.destroy()
         super.onDestroy()

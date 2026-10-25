@@ -40,7 +40,7 @@ if not APP.is_dir():
 # 1) Código nativo -----------------------------------------------------------
 java_dir = APP / "src" / "main" / "java" / pathlib.Path(*PKG.split("."))
 java_dir.mkdir(parents=True, exist_ok=True)
-for name in ("YtDlpPlugin.kt", "BrowserActivity.kt", "SharedStore.java", "MainActivity.java"):
+for name in ("YtDlpPlugin.kt", "BrowserActivity.kt", "FormatPicker.kt", "SharedStore.java", "MainActivity.java"):
     shutil.copy2(NATIVE / name, java_dir / name)
 print("[ok] código nativo copiado a", java_dir)
 

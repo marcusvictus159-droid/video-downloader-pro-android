@@ -329,15 +329,21 @@ class YtDlpPlugin : Plugin() {
         }
     }
 
-    /** Entrega (y vacía) los enlaces agregados desde el navegador de YouTube. */
+    /** Entrega (y vacía) los videos agregados desde el navegador, con el formato y calidad elegidos. */
     @PluginMethod
     fun takePending(call: PluginCall) {
         val arr = JSArray()
         synchronized(SharedStore.pending) {
-            SharedStore.pending.forEach { arr.put(it) }
+            SharedStore.pending.forEach { raw ->
+                try {
+                    arr.put(JSObject(raw))
+                } catch (e: Exception) {
+                    arr.put(JSObject().put("url", raw))
+                }
+            }
             SharedStore.pending.clear()
         }
-        call.resolve(JSObject().put("urls", arr))
+        call.resolve(JSObject().put("items", arr))
     }
 
     @PluginMethod

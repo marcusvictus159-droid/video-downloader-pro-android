@@ -420,9 +420,21 @@
     const skip = $('#skipHist').checked;
     let added = 0;
 
-    urls.forEach((url) => {
+    urls.forEach((entry) => {
+      // Cada entrada es un enlace o {url, format, maxHeight, title} elegidos en el navegador.
+      const isObj = entry && typeof entry === 'object';
+      const url = isObj ? entry.url : entry;
+      const o = isObj
+        ? Object.assign({}, opts, {
+            format: entry.format || opts.format,
+            maxHeight: entry.maxHeight != null ? entry.maxHeight : opts.maxHeight,
+          })
+        : opts;
       const key = videoKey(url);
-      const base = { id: 'dl_' + Date.now() + '_' + (seq++), url, key, progress: 0, eta: 0, title: '', logIdx: 0, opts };
+      const base = {
+        id: 'dl_' + Date.now() + '_' + (seq++), url, key, progress: 0, eta: 0,
+        title: (isObj && entry.title) || '', logIdx: 0, opts: o,
+      };
       const seen = skip && history.find((h) => h.key === key);
       if (seen) {
         state.queue.push(Object.assign(base, { status: 'skipped', title: seen.title || '' }));
@@ -481,8 +493,8 @@
     if (!YtDlp || !state.ready) return;
     try {
       const r = await YtDlp.takePending();
-      const urls = (r && r.urls) || [];
-      if (urls.length) enqueueUrls(urls);
+      const items = (r && r.items) || [];
+      if (items.length) enqueueUrls(items);
     } catch (e) { /* nada pendiente */ }
   }
   setInterval(() => {
