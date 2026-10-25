@@ -19,6 +19,7 @@ import android.widget.FrameLayout
 import android.widget.ImageButton
 import android.widget.LinearLayout
 import android.widget.TextView
+import android.widget.Toast
 import androidx.activity.OnBackPressedCallback
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.view.WindowCompat
@@ -39,20 +40,23 @@ class BrowserActivity : AppCompatActivity() {
     private var customView: View? = null
     private var customCallback: WebChromeClient.CustomViewCallback? = null
 
-    private data class Site(val id: String, val title: String, val start: String, val hosts: List<String>)
+    private data class Site(val id: String, val title: String, val start: String, val hosts: List<String>, val feed: Boolean = false)
 
     private val sites = listOf(
         Site("youtube", "YouTube", "https://m.youtube.com/", listOf("youtube.com", "youtu.be")),
-        Site("facebook", "Facebook", "https://m.facebook.com/", listOf("facebook.com", "fb.watch")),
-        Site("tiktok", "TikTok", "https://www.tiktok.com/", listOf("tiktok.com")),
-        Site("instagram", "Instagram", "https://www.instagram.com/", listOf("instagram.com")),
-        Site("x", "X", "https://x.com/", listOf("x.com", "twitter.com")),
+        Site("facebook", "Facebook", "https://m.facebook.com/", listOf("facebook.com", "fb.watch"), feed = true),
+        Site("tiktok", "TikTok", "https://www.tiktok.com/", listOf("tiktok.com"), feed = true),
+        Site("instagram", "Instagram", "https://www.instagram.com/", listOf("instagram.com"), feed = true),
+        Site("x", "X", "https://x.com/", listOf("x.com", "twitter.com"), feed = true),
         Site("vimeo", "Vimeo", "https://vimeo.com/", listOf("vimeo.com"))
     ).associateBy { it.id }
 
     private lateinit var site: Site
 
     private var currentLink: String? = null
+    private var lastUrl: String? = null
+    private var fromShare = false
+    private var shareTs = 0L
     private val added = LinkedHashSet<String>()
 
     private var dark = false
@@ -190,7 +194,14 @@ class BrowserActivity : AppCompatActivity() {
         CookieManager.getInstance().setAcceptCookie(true)
         CookieManager.getInstance().setAcceptThirdPartyCookies(web, true)
 
+        web.addJavascriptInterface(Bridge(), "VDP")
+
         web.webViewClient = object : WebViewClient() {
+            override fun onPageStarted(view: WebView, url: String?, favicon: android.graphics.Bitmap?) {
+                super.onPageStarted(view, url, favicon)
+                view.evaluateJavascript(HOOK_JS, null)
+            }
+
             override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                 val scheme = request.url.scheme ?: return true
                 // Esquemas como vnd.youtube: o intent: abrirían otras apps; se bloquean.
@@ -204,6 +215,7 @@ class BrowserActivity : AppCompatActivity() {
 
             override fun onPageFinished(view: WebView, url: String?) {
                 super.onPageFinished(view, url)
+                view.evaluateJavascript(HOOK_JS, null)
                 onUrl(url)
             }
         }
@@ -301,28 +313,98 @@ class BrowserActivity : AppCompatActivity() {
     }
 
     private fun onUrl(url: String?) {
-        val link = videoLink(url)
-        if (link == currentLink) return
-        currentLink = link
+        if (url == lastUrl) return
+        lastUrl = url
+        fromShare = false
+        currentLink = videoLink(url)
         runOnUiThread { renderFab() }
     }
 
+    private fun toast(msg: String) {
+        Toast.makeText(this, msg, Toast.LENGTH_SHORT).show()
+    }
+
     private fun addCurrent() {
-        val link = currentLink ?: return
-        if (added.contains(link)) return
+        val link = currentLink
+        val fresh = !fromShare || (System.currentTimeMillis() - shareTs) < 90_000
+        if (link != null && fresh) {
+            addLink(link)
+            return
+        }
+        if (site.feed) resolveFromPage()
+    }
+
+    private fun addLink(link: String) {
+        if (added.contains(link)) {
+            toast("Ese video ya está en la cola")
+            return
+        }
         added.add(link)
         SharedStore.pending.add(link)
+        if (fromShare) {
+            fromShare = false
+            currentLink = null
+        }
+        toast("Agregado a las descargas")
         renderFab()
         updateDoneButton()
     }
 
+    /** Busca en la página el video que se está viendo (feeds que no cambian de dirección). */
+    private fun resolveFromPage() {
+        web.evaluateJavascript(RESOLVER_JS) { res ->
+            var found: String? = null
+            try {
+                val str = org.json.JSONTokener(res).nextValue() as? String
+                if (str != null) {
+                    val arr = org.json.JSONArray(str)
+                    for (i in 0 until arr.length()) {
+                        val v = videoLink(arr.getString(i))
+                        if (v != null) { found = v; break }
+                    }
+                }
+            } catch (e: Exception) {
+                found = null
+            }
+            val f = found
+            if (f != null) {
+                addLink(f)
+            } else {
+                Toast.makeText(
+                    this,
+                    "No encuentro el enlace de este video. Toca Compartir y Copiar enlace, o ábrelo desde el perfil o la búsqueda.",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
+        }
+    }
+
+    /** Texto que la página copió o compartió (Compartir → Copiar enlace). */
+    private fun onSharedText(text: String) {
+        val m = Regex("https?://[^\\s\"'<>]+").find(text) ?: return
+        val v = videoLink(m.value) ?: return
+        currentLink = v
+        fromShare = true
+        shareTs = System.currentTimeMillis()
+        renderFab()
+        toast("Enlace detectado. Toca Descargar")
+    }
+
+    inner class Bridge {
+        @android.webkit.JavascriptInterface
+        fun link(text: String?) {
+            if (text.isNullOrBlank()) return
+            runOnUiThread { onSharedText(text) }
+        }
+    }
+
     private fun renderFab() {
         val link = currentLink
-        if (link == null) {
+        if (link == null && !site.feed) {
             fab.visibility = View.GONE
             return
         }
-        val already = added.contains(link)
+        val already = link != null && added.contains(link)
         fab.text = if (already) "Agregado" else "Descargar"
         fab.setTextColor(if (already) ink else onAccent)
 
@@ -370,5 +452,65 @@ class BrowserActivity : AppCompatActivity() {
         (web.parent as? ViewGroup)?.removeView(web)
         web.destroy()
         super.onDestroy()
+    }
+
+    companion object {
+        /** Captura los enlaces que la página copia o comparte. */
+        private const val HOOK_JS = """
+(function () {
+  if (window.__vdpHook) return;
+  window.__vdpHook = 1;
+  function send(t) { try { if (t && /https?:\/\//.test(t)) VDP.link(String(t)); } catch (e) {} }
+  try {
+    var cw = navigator.clipboard && navigator.clipboard.writeText;
+    if (cw) {
+      navigator.clipboard.writeText = function (t) { send(t); return cw.apply(navigator.clipboard, arguments); };
+    }
+  } catch (e) {}
+  try {
+    navigator.share = function (d) { send(d && (d.url || d.text)); return Promise.resolve(); };
+  } catch (e) {}
+  document.addEventListener('copy', function () { try { send(String(window.getSelection())); } catch (e) {} }, true);
+})();
+"""
+
+        /** Lista, ordenada por cercanía al centro de la pantalla, los enlaces candidatos de la página. */
+        private const val RESOLVER_JS = """
+(function () {
+  var out = [];
+  var vh = window.innerHeight || 800, cy = vh / 2;
+  function abs(h) { try { return new URL(h, location.href).href; } catch (e) { return null; } }
+  function dist(r) {
+    if (!r || (r.width === 0 && r.height === 0)) return 1e7;
+    var mid = (r.top + r.bottom) / 2;
+    var vis = r.bottom > 0 && r.top < vh;
+    return (vis ? 0 : 1e6) + Math.abs(mid - cy);
+  }
+  var c = document.querySelector('link[rel="canonical"]');
+  if (c && c.href) out.push([c.href, 5e6]);
+  var m = document.querySelector('meta[property="og:url"]');
+  if (m && m.content) out.push([m.content, 5e6]);
+  var as = document.querySelectorAll('a[href]');
+  for (var i = 0; i < as.length && i < 1500; i++) {
+    var u = abs(as[i].getAttribute('href'));
+    if (u) out.push([u, dist(as[i].getBoundingClientRect())]);
+  }
+  if (location.hostname.indexOf('tiktok.com') > -1) {
+    var vs = document.querySelectorAll('video');
+    for (var j = 0; j < vs.length; j++) {
+      var d = dist(vs[j].getBoundingClientRect());
+      var el = vs[j], k = 0;
+      while (el && k < 8) {
+        var s = (el.id || '') + ' ' + (el.getAttribute ? (el.getAttribute('data-id') || el.getAttribute('data-video-id') || '') : '');
+        var mm = s.match(/\d{17,20}/);
+        if (mm) { out.push(['https://www.tiktok.com/@a/video/' + mm[0], d]); break; }
+        el = el.parentElement; k++;
+      }
+    }
+  }
+  out.sort(function (a, b) { return a[1] - b[1]; });
+  return JSON.stringify(out.slice(0, 40).map(function (x) { return x[0]; }));
+})()
+"""
     }
 }
