@@ -31,6 +31,9 @@ scripts/patch_android.py   parchea el proyecto Android generado por Capacitor
 ```
 `android/` no se sube: se genera en cada compilación con `npx cap add android` + el parche.
 
+## Cambiar el icono
+Reemplaza los PNG de 1024x1024 en `assets/` (`icon-only.png`, `icon-foreground.png` con fondo transparente e `icon-background.png`) y haz push: el workflow genera todos los tamaños.
+
 ## Notas
 - Android 10 o superior (minSdk 29). Incluye arm64-v8a y armeabi-v7a.
 - Mantén la app abierta mientras descarga (no hay servicio en segundo plano todavía).

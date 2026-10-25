@@ -33,6 +33,9 @@ jobs:
       - name: Aplicar parche (yt-dlp, FFmpeg, plugin nativo)
         run: python3 scripts/patch_android.py
 
+      - name: Generar iconos de la app
+        run: npx capacitor-assets generate --android
+
       - name: Sincronizar web con Android
         run: npx cap sync android
 
