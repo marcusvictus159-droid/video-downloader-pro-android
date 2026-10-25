@@ -357,6 +357,62 @@ label.row:active, .row.pick:active { background: var(--press); }
 .empty-t { margin: 10px 0 0; font-size: 17px; font-weight: 600; color: var(--ink); }
 .empty-s { margin: 0 0 16px; font-size: 14px; max-width: 28ch; }
 
+/* ---------- biblioteca ---------- */
+.search {
+  position: relative; margin-bottom: 14px;
+}
+.search .ico {
+  position: absolute; left: 14px; top: 50%; transform: translateY(-50%);
+  width: 20px; height: 20px; color: var(--muted); pointer-events: none;
+}
+.search input {
+  width: 100%; height: 48px;
+  font: inherit; font-size: 16px; color: var(--ink);
+  background: var(--surface);
+  border: 1.5px solid transparent; border-radius: 14px;
+  padding: 0 14px 0 44px;
+  -webkit-user-select: text; user-select: text;
+}
+.search input::placeholder { color: var(--muted); }
+.search input:focus { outline: none; border-color: var(--accent); }
+
+.media { list-style: none; margin: 0 0 12px; padding: 0; display: grid; gap: 8px; }
+.m {
+  display: flex; align-items: center; gap: 12px;
+  background: var(--surface); border-radius: 16px;
+  padding: 8px; cursor: pointer;
+}
+.m:active { background: var(--surface-2); }
+.m-th {
+  position: relative; flex: none; overflow: hidden;
+  width: 112px; height: 63px; border-radius: 11px;
+  background: var(--surface-2);
+}
+.m-th img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.m-th img:not([src]) { visibility: hidden; }
+.m-dur {
+  position: absolute; right: 5px; bottom: 5px;
+  background: rgba(0, 0, 0, .72); color: #fff;
+  font-size: 11px; font-weight: 600; line-height: 1;
+  padding: 3px 5px; border-radius: 5px;
+  font-variant-numeric: tabular-nums;
+}
+.m-ic {
+  flex: none; width: 52px; height: 52px; border-radius: 16px;
+  display: grid; place-items: center;
+  background: var(--tint); color: var(--accent);
+}
+.m-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding-right: 6px; }
+.m-t {
+  font-size: 15px; font-weight: 500;
+  overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+  word-break: break-word;
+}
+.m-s { font-size: 13px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tonal.wide { width: 100%; margin-bottom: 12px; }
+.note.center { text-align: center; padding: 24px 0; }
+
 /* ---------- registro ---------- */
 .log { background: var(--surface); border-radius: 18px; padding: 0 16px; }
 .log summary { padding: 18px 0; cursor: pointer; list-style: none; }
@@ -371,7 +427,7 @@ label.row:active, .row.pick:active { background: var(--press); }
 
 /* ---------- barra inferior ---------- */
 .tabs {
-  display: grid; grid-template-columns: repeat(3, 1fr);
+  display: grid; grid-template-columns: repeat(4, 1fr);
   background: var(--nav);
   border-top: 1px solid var(--line);
   padding: 8px 8px calc(10px + env(safe-area-inset-bottom, 0px));

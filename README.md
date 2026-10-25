@@ -39,7 +39,7 @@ Reemplaza los PNG de 1024x1024 en `assets/` (`icon-only.png`, `icon-foreground.p
 
 ## Notas
 - Android 10 o superior (minSdk 29). Incluye arm64-v8a y armeabi-v7a.
-- Mantén la app abierta mientras descarga (no hay servicio en segundo plano todavía).
+- Las descargas siguen en segundo plano (servicio en primer plano con notificación). Si tu teléfono es muy agresivo con la batería (Xiaomi, Samsung…), quita la optimización de batería a la app.
 - Si YouTube cambia algo, usa **Actualizar** en la tarjeta del motor.
 - Para subir la versión de la librería, cambia `YTDL_VERSION` en `scripts/patch_android.py`.
 - Descarga solo contenido propio o que tengas permiso de descargar.

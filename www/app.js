@@ -156,6 +156,7 @@
       t.classList.toggle('active', on);
       if (on) t.setAttribute('aria-current', 'page'); else t.removeAttribute('aria-current');
     });
+    if (name === 'lib') libOpen();
   }
   $$('.tab').forEach((t) => t.addEventListener('click', () => showTab(t.dataset.tab)));
   $('#goNew').addEventListener('click', () => { showTab('new'); $('#urls').focus(); });
@@ -676,7 +677,8 @@
     if (sheet.step === 'main') {
       $('#sheetSub').textContent = it.path || '';
       acts.innerHTML =
-        '<button class="primary" type="button" data-act="open">Abrir con…</button>' +
+        '<button class="primary" type="button" data-act="play">Reproducir en la app</button>' +
+        '<button class="primary quiet" type="button" data-act="open">Abrir con otra app</button>' +
         '<button class="primary danger" type="button" data-act="ask">Eliminar del teléfono</button>';
     } else {
       $('#sheetSub').textContent = 'Se borrará el archivo del teléfono. Esta acción no se puede deshacer.';
@@ -695,6 +697,20 @@
 
     if (act === 'ask') { sheet.step = 'confirm'; renderSheet(); return; }
     if (act === 'back') { sheet.step = 'main'; renderSheet(); return; }
+
+    if (act === 'play') {
+      closeSheet();
+      try {
+        await YtDlp.playMedia({
+          kind: it.opts && it.opts.format === 'mp3' ? 'audio' : 'video',
+          index: 0,
+          items: [{ uri: it.uri, title: it.title }],
+        });
+      } catch (err) {
+        toast((err && err.message) || 'No se pudo abrir el reproductor');
+      }
+      return;
+    }
 
     if (act === 'open') {
       try {
@@ -723,6 +739,236 @@
         renderSheet();
       }
     }
+  });
+
+  // ------------------------------------------------------------ biblioteca
+  const lib = {
+    kind: store.get('libKind', 'video'),
+    all: { video: [], audio: [] },
+    view: [],
+    folder: '',
+    q: '',
+    shown: 0,
+    loadedAt: 0,
+    loading: false,
+  };
+  const PAGE = 120;
+
+  function fmtDur(ms) {
+    const s = Math.round((ms || 0) / 1000);
+    const h = Math.floor(s / 3600);
+    const m = Math.floor((s % 3600) / 60);
+    const x = s % 60;
+    return h > 0
+      ? h + ':' + String(m).padStart(2, '0') + ':' + String(x).padStart(2, '0')
+      : m + ':' + String(x).padStart(2, '0');
+  }
+  function fmtSize(b) {
+    if (!b) return '';
+    return b >= 1e9 ? (b / 1e9).toFixed(1) + ' GB' : Math.max(1, Math.round(b / 1e6)) + ' MB';
+  }
+  const cleanArtist = (a) => (a && a !== '<unknown>' ? a : '');
+
+  function showGate(title, text, canAsk) {
+    $('#libGate').hidden = false;
+    $('#libMain').hidden = true;
+    $('#libGateT').textContent = title;
+    $('#libGateS').textContent = text;
+    $('#libGrant').hidden = !canAsk;
+  }
+
+  async function libOpen() {
+    if (!YtDlp) {
+      showGate('Solo en Android', 'La biblioteca funciona dentro de la app instalada en el teléfono.', false);
+      return;
+    }
+    let granted = false;
+    try {
+      const r = await YtDlp.mediaAccess();
+      granted = !!(r && r.granted);
+    } catch (e) { /* sin permiso */ }
+    if (!granted) {
+      showGate(
+        'Da acceso a tus archivos',
+        'Para mostrar tus videos y tu música, Android necesita que lo permitas una vez.',
+        true
+      );
+      return;
+    }
+    $('#libGate').hidden = true;
+    $('#libMain').hidden = false;
+    if (Date.now() - lib.loadedAt > 30000) loadLibrary();
+  }
+
+  $('#libGrant').addEventListener('click', async () => {
+    try {
+      const r = await YtDlp.requestMediaAccess();
+      if (r && r.granted) libOpen();
+      else toast('Sin ese permiso no puedo mostrar tus archivos');
+    } catch (e) {
+      toast('No se pudo pedir el permiso');
+    }
+  });
+
+  async function loadLibrary() {
+    if (lib.loading) return;
+    lib.loading = true;
+    $('#libStatus').hidden = false;
+    try {
+      const r = await YtDlp.listMedia();
+      if (r && r.granted === false) { lib.loading = false; $('#libStatus').hidden = true; libOpen(); return; }
+      lib.all.video = (r && r.videos) || [];
+      lib.all.audio = (r && r.audios) || [];
+      lib.loadedAt = Date.now();
+    } catch (e) {
+      toast((e && e.message) || 'No se pudo leer la biblioteca');
+    } finally {
+      lib.loading = false;
+      $('#libStatus').hidden = true;
+      refreshLib();
+    }
+  }
+
+  function refreshLib() {
+    // pestañas con conteo
+    $$('[data-kind]').forEach((b) => {
+      const k = b.dataset.kind;
+      b.textContent = (k === 'video' ? 'Videos' : 'Audio') + ' (' + lib.all[k].length + ')';
+      b.setAttribute('aria-checked', String(k === lib.kind));
+    });
+    // carpetas del tipo actual
+    const counts = new Map();
+    lib.all[lib.kind].forEach((x) => counts.set(x.folder, (counts.get(x.folder) || 0) + 1));
+    if (lib.folder && !counts.has(lib.folder)) lib.folder = '';
+    const sel = $('#folderSel');
+    const folders = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]);
+    sel.innerHTML = '<option value="">Todas las carpetas (' + lib.all[lib.kind].length + ')</option>' +
+      folders.map((f) => '<option value="' + esc(f[0]) + '">' + esc(f[0]) + ' (' + f[1] + ')</option>').join('');
+    sel.value = lib.folder;
+    $('#folderLabel').textContent = lib.folder || 'Todas';
+    applyLibFilter();
+  }
+
+  function applyLibFilter() {
+    const q = lib.q.trim().toLowerCase();
+    lib.view = lib.all[lib.kind].filter((x) =>
+      (!lib.folder || x.folder === lib.folder) &&
+      (!q || (x.title + ' ' + x.name + ' ' + (x.artist || '')).toLowerCase().includes(q))
+    );
+    renderLib(false);
+  }
+
+  function mediaRow(x, i) {
+    if (lib.kind === 'video') {
+      return '<li class="m" data-i="' + i + '" role="button" tabindex="0">' +
+        '<span class="m-th"><img data-uri="' + esc(x.uri) + '" alt="">' +
+        '<span class="m-dur">' + fmtDur(x.duration) + '</span></span>' +
+        '<div class="m-body"><span class="m-t">' + esc(x.title) + '</span>' +
+        '<span class="m-s">' + esc([x.folder, fmtSize(x.size)].filter(Boolean).join(' · ')) + '</span></div></li>';
+    }
+    const artist = cleanArtist(x.artist);
+    return '<li class="m" data-i="' + i + '" role="button" tabindex="0">' +
+      '<span class="m-ic">' + icon('music') + '</span>' +
+      '<div class="m-body"><span class="m-t">' + esc(x.title) + '</span>' +
+      '<span class="m-s">' + esc([artist, x.folder, fmtDur(x.duration)].filter(Boolean).join(' · ')) + '</span></div></li>';
+  }
+
+  function renderLib(more) {
+    const ul = $('#libList');
+    if (!more) { lib.shown = 0; ul.innerHTML = ''; }
+    const next = lib.view.slice(lib.shown, lib.shown + PAGE);
+    ul.insertAdjacentHTML('beforeend', next.map((x, k) => mediaRow(x, lib.shown + k)).join(''));
+    lib.shown += next.length;
+    $('#libMore').hidden = lib.shown >= lib.view.length;
+    $('#libMore').textContent = 'Mostrar más (' + (lib.view.length - lib.shown) + ')';
+    const empty = lib.view.length === 0 && !lib.loading;
+    $('#libEmpty').hidden = !empty;
+    $('#libEmpty').textContent = lib.q || lib.folder
+      ? 'No hay resultados con ese filtro.'
+      : (lib.kind === 'video' ? 'No hay videos en el teléfono.' : 'No hay audios en el teléfono.');
+    if (lib.kind === 'video') {
+      ul.querySelectorAll('img[data-uri]:not([data-obs])').forEach((img) => {
+        img.dataset.obs = '1';
+        thumbObserver.observe(img);
+      });
+    }
+  }
+
+  // Miniaturas: se piden solo cuando la fila aparece en pantalla.
+  const thumbCache = new Map();
+  const thumbQueue = [];
+  let thumbBusy = 0;
+  const thumbObserver = new IntersectionObserver((entries) => {
+    entries.forEach((en) => {
+      if (!en.isIntersecting) return;
+      thumbObserver.unobserve(en.target);
+      wantThumb(en.target);
+    });
+  }, { rootMargin: '200px' });
+
+  function wantThumb(img) {
+    const uri = img.dataset.uri;
+    if (thumbCache.has(uri)) { img.src = thumbCache.get(uri); return; }
+    thumbQueue.push(img);
+    pumpThumbs();
+  }
+  function pumpThumbs() {
+    while (thumbBusy < 3 && thumbQueue.length) {
+      const img = thumbQueue.shift();
+      if (!img.isConnected) continue;
+      const uri = img.dataset.uri;
+      thumbBusy++;
+      YtDlp.getThumbnail({ uri }).then((r) => {
+        if (r && r.data) {
+          const src = 'data:image/jpeg;base64,' + r.data;
+          thumbCache.set(uri, src);
+          if (thumbCache.size > 400) thumbCache.delete(thumbCache.keys().next().value);
+          img.src = src;
+        }
+      }).catch(() => {}).finally(() => { thumbBusy--; pumpThumbs(); });
+    }
+  }
+
+  async function playAt(i) {
+    const start = Math.max(0, i - 30);
+    const slice = lib.view.slice(start, start + 300);
+    try {
+      await YtDlp.playMedia({
+        kind: lib.kind,
+        index: i - start,
+        items: slice.map((x) => ({ uri: x.uri, title: x.title, artist: cleanArtist(x.artist) })),
+      });
+    } catch (e) {
+      toast((e && e.message) || 'No se pudo abrir el reproductor');
+    }
+  }
+
+  $('#libList').addEventListener('click', (e) => {
+    const li = e.target.closest('[data-i]');
+    if (li) playAt(parseInt(li.dataset.i, 10));
+  });
+  $('#libList').addEventListener('keydown', (e) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    const li = e.target.closest('[data-i]');
+    if (li) { e.preventDefault(); playAt(parseInt(li.dataset.i, 10)); }
+  });
+  $('#libMore').addEventListener('click', () => renderLib(true));
+
+  $$('[data-kind]').forEach((b) => b.addEventListener('click', () => {
+    lib.kind = b.dataset.kind;
+    store.set('libKind', lib.kind);
+    lib.folder = '';
+    refreshLib();
+  }));
+  $('#folderSel').addEventListener('change', (e) => {
+    lib.folder = e.target.value;
+    $('#folderLabel').textContent = lib.folder || 'Todas';
+    applyLibFilter();
+  });
+  let searchTimer = null;
+  $('#libSearch').addEventListener('input', (e) => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => { lib.q = e.target.value; applyLibFilter(); }, 180);
   });
 
   // -------------------------------------------------------------- arranque

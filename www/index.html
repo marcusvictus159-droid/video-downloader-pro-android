@@ -113,6 +113,46 @@
       </div>
     </section>
 
+    <!-- Biblioteca -->
+    <section id="s-lib" class="screen" aria-labelledby="t-lib">
+      <div class="scroll">
+        <h1 id="t-lib" class="title">Biblioteca</h1>
+
+        <div id="libGate" class="empty" hidden>
+          <svg class="ico big"><use href="#i-film"/></svg>
+          <p id="libGateT" class="empty-t"></p>
+          <p id="libGateS" class="empty-s"></p>
+          <button id="libGrant" class="tonal" type="button" hidden>Dar acceso</button>
+        </div>
+
+        <div id="libMain" hidden>
+          <div class="seg" role="radiogroup" aria-label="Tipo de archivo">
+            <button type="button" role="radio" class="seg-btn" data-kind="video">Videos</button>
+            <button type="button" role="radio" class="seg-btn" data-kind="audio">Audio</button>
+          </div>
+
+          <div class="search">
+            <svg class="ico"><use href="#i-search"/></svg>
+            <input id="libSearch" type="search" placeholder="Buscar por nombre" aria-label="Buscar por nombre" autocomplete="off" spellcheck="false">
+          </div>
+
+          <ul class="list">
+            <li class="row pick">
+              <div class="row-main"><span class="row-t">Carpeta</span></div>
+              <span id="folderLabel" class="row-v">Todas</span>
+              <svg class="ico chev"><use href="#i-chevron"/></svg>
+              <select id="folderSel" aria-label="Carpeta"></select>
+            </li>
+          </ul>
+
+          <p id="libStatus" class="note" hidden>Cargando archivos…</p>
+          <ul id="libList" class="media"></ul>
+          <button id="libMore" class="tonal wide" type="button" hidden>Mostrar más</button>
+          <p id="libEmpty" class="note center" hidden></p>
+        </div>
+      </div>
+    </section>
+
     <!-- Ajustes -->
     <section id="s-set" class="screen" aria-labelledby="t-set">
       <div class="scroll">
@@ -160,7 +200,7 @@
           <pre id="console" aria-live="polite"></pre>
         </details>
 
-        <p class="note foot">Versión 1.5. Descarga solo contenido propio o que tengas permiso de guardar.</p>
+        <p class="note foot">Versión 1.7. Descarga solo contenido propio o que tengas permiso de guardar.</p>
       </div>
     </section>
   </main>
@@ -176,6 +216,10 @@
         <b id="badge" class="badge" hidden>0</b>
       </span>
       <span class="tab-l">Descargas</span>
+    </button>
+    <button class="tab" type="button" data-tab="lib">
+      <span class="pill"><svg class="ico"><use href="#i-film"/></svg></span>
+      <span class="tab-l">Biblioteca</span>
     </button>
     <button class="tab" type="button" data-tab="set">
       <span class="pill"><svg class="ico"><use href="#i-sliders"/></svg></span>

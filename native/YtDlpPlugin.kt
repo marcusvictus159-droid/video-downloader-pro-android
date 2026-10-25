@@ -1,12 +1,19 @@
 package com.videodownloader.pro
 
+import android.Manifest
 import android.content.ActivityNotFoundException
+import android.content.ContentUris
 import android.content.ClipData
 import android.content.ContentValues
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.graphics.Bitmap
 import android.net.Uri
+import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import android.util.Base64
+import android.util.Size
 import android.webkit.MimeTypeMap
 import com.getcapacitor.JSArray
 import com.getcapacitor.JSObject
@@ -14,21 +21,35 @@ import com.getcapacitor.Plugin
 import com.getcapacitor.PluginCall
 import com.getcapacitor.PluginMethod
 import com.getcapacitor.annotation.CapacitorPlugin
+import com.getcapacitor.annotation.Permission
+import com.getcapacitor.annotation.PermissionCallback
+import androidx.core.content.ContextCompat
 import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.IOException
 import java.lang.reflect.InvocationTargetException
 import java.util.Collections
 import java.util.concurrent.ConcurrentHashMap
 import java.util.concurrent.Executors
+import java.util.concurrent.atomic.AtomicInteger
 
 /**
  * Puente entre la interfaz web y yt-dlp (librería youtubedl-android).
  * La interfaz consulta el avance con getProgress() (polling), así no depende de eventos.
  */
-@CapacitorPlugin(name = "YtDlp")
+@CapacitorPlugin(
+    name = "YtDlp",
+    permissions = [
+        Permission(
+            strings = [Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO],
+            alias = "media33"
+        ),
+        Permission(strings = [Manifest.permission.READ_EXTERNAL_STORAGE], alias = "mediaLegacy")
+    ]
+)
 class YtDlpPlugin : Plugin() {
 
     private class DlState {
@@ -53,6 +74,7 @@ class YtDlpPlugin : Plugin() {
     }
 
     private val executor = Executors.newCachedThreadPool()
+    private val active = AtomicInteger(0)
     private val states = ConcurrentHashMap<String, DlState>()
     private val cancelled: MutableSet<String> = Collections.newSetFromMap(ConcurrentHashMap<String, Boolean>())
     private val initLock = Any()
@@ -176,7 +198,19 @@ class YtDlpPlugin : Plugin() {
         states[id] = state
         cancelled.remove(id)
 
-        executor.execute { runDownload(call, id, url, format, maxHeight, playlist, state) }
+        if (active.getAndIncrement() == 0) {
+            DownloadService.start(context, "Descargando en segundo plano")
+        }
+        executor.execute {
+            try {
+                runDownload(call, id, url, format, maxHeight, playlist, state)
+            } finally {
+                if (active.decrementAndGet() <= 0) {
+                    active.set(0)
+                    DownloadService.stop(context)
+                }
+            }
+        }
     }
 
     private fun runDownload(
@@ -351,6 +385,186 @@ class YtDlpPlugin : Plugin() {
         val t = SharedStore.text
         SharedStore.text = null
         call.resolve(JSObject().put("text", t ?: ""))
+    }
+
+    // ------------------------------------------------------------ biblioteca
+
+    private fun mediaPermissionAlias(): String =
+        if (Build.VERSION.SDK_INT >= 33) "media33" else "mediaLegacy"
+
+    private fun hasMediaPermission(): Boolean {
+        val perms = if (Build.VERSION.SDK_INT >= 33) {
+            arrayOf(Manifest.permission.READ_MEDIA_VIDEO, Manifest.permission.READ_MEDIA_AUDIO)
+        } else {
+            arrayOf(Manifest.permission.READ_EXTERNAL_STORAGE)
+        }
+        return perms.all {
+            ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
+        }
+    }
+
+    @PluginMethod
+    fun mediaAccess(call: PluginCall) {
+        call.resolve(JSObject().put("granted", hasMediaPermission()))
+    }
+
+    @PluginMethod
+    fun requestMediaAccess(call: PluginCall) {
+        if (hasMediaPermission()) {
+            call.resolve(JSObject().put("granted", true))
+        } else {
+            requestPermissionForAliases(arrayOf(mediaPermissionAlias()), call, "mediaPermsResult")
+        }
+    }
+
+    @PermissionCallback
+    fun mediaPermsResult(call: PluginCall) {
+        call.resolve(JSObject().put("granted", hasMediaPermission()))
+    }
+
+    /** Lista todos los videos y audios del teléfono, de cualquier carpeta. */
+    @PluginMethod
+    fun listMedia(call: PluginCall) {
+        if (!hasMediaPermission()) {
+            call.resolve(JSObject().put("granted", false))
+            return
+        }
+        executor.execute {
+            try {
+                val videos = queryMedia(true)
+                val audios = queryMedia(false)
+                call.resolve(
+                    JSObject().put("granted", true).put("videos", videos).put("audios", audios)
+                )
+            } catch (e: Exception) {
+                call.reject("No se pudo leer la biblioteca: " + shortMsg(e))
+            }
+        }
+    }
+
+    private fun queryMedia(video: Boolean): JSArray {
+        val out = JSArray()
+        val collection = if (video) {
+            MediaStore.Video.Media.EXTERNAL_CONTENT_URI
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+        val cols = arrayListOf(
+            MediaStore.MediaColumns._ID,
+            MediaStore.MediaColumns.DISPLAY_NAME,
+            MediaStore.MediaColumns.TITLE,
+            MediaStore.MediaColumns.DURATION,
+            MediaStore.MediaColumns.SIZE,
+            MediaStore.MediaColumns.DATE_ADDED,
+            MediaStore.MediaColumns.MIME_TYPE,
+            MediaStore.MediaColumns.RELATIVE_PATH,
+            MediaStore.MediaColumns.BUCKET_DISPLAY_NAME
+        )
+        if (!video) cols.add(MediaStore.Audio.Media.ARTIST)
+        val selection = if (video) null else
+            MediaStore.Audio.Media.IS_RINGTONE + "=0 AND " +
+                MediaStore.Audio.Media.IS_NOTIFICATION + "=0 AND " +
+                MediaStore.Audio.Media.IS_ALARM + "=0"
+
+        context.contentResolver.query(
+            collection, cols.toTypedArray(), selection, null,
+            MediaStore.MediaColumns.DATE_ADDED + " DESC"
+        )?.use { c ->
+            val iId = c.getColumnIndexOrThrow(MediaStore.MediaColumns._ID)
+            val iName = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DISPLAY_NAME)
+            val iTitle = c.getColumnIndexOrThrow(MediaStore.MediaColumns.TITLE)
+            val iDur = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DURATION)
+            val iSize = c.getColumnIndexOrThrow(MediaStore.MediaColumns.SIZE)
+            val iDate = c.getColumnIndexOrThrow(MediaStore.MediaColumns.DATE_ADDED)
+            val iMime = c.getColumnIndexOrThrow(MediaStore.MediaColumns.MIME_TYPE)
+            val iRel = c.getColumnIndexOrThrow(MediaStore.MediaColumns.RELATIVE_PATH)
+            val iBucket = c.getColumnIndexOrThrow(MediaStore.MediaColumns.BUCKET_DISPLAY_NAME)
+            val iArtist = if (video) -1 else c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+
+            var n = 0
+            while (c.moveToNext() && n < 8000) {
+                val id = c.getLong(iId)
+                val name = c.getString(iName) ?: ""
+                val title = (c.getString(iTitle) ?: "").ifBlank { name.substringBeforeLast('.') }
+                val rel = c.getString(iRel) ?: ""
+                val bucket = c.getString(iBucket) ?: ""
+                val folder = bucket.ifBlank { rel.trimEnd('/').substringAfterLast('/') }.ifBlank { "Otros" }
+                val artist = if (iArtist >= 0) (c.getString(iArtist) ?: "") else ""
+                out.put(
+                    JSObject()
+                        .put("id", id)
+                        .put("uri", ContentUris.withAppendedId(collection, id).toString())
+                        .put("title", title)
+                        .put("name", name)
+                        .put("duration", c.getLong(iDur))
+                        .put("size", c.getLong(iSize))
+                        .put("date", c.getLong(iDate))
+                        .put("mime", c.getString(iMime) ?: "")
+                        .put("folder", folder)
+                        .put("path", rel)
+                        .put("artist", artist)
+                )
+                n++
+            }
+        }
+        return out
+    }
+
+    /** Miniatura de un video como JPEG en base64. */
+    @PluginMethod
+    fun getThumbnail(call: PluginCall) {
+        val uriStr = call.getString("uri")
+        if (uriStr.isNullOrBlank()) {
+            call.resolve(JSObject())
+            return
+        }
+        executor.execute {
+            try {
+                val bmp = context.contentResolver.loadThumbnail(Uri.parse(uriStr), Size(240, 135), null)
+                val bos = ByteArrayOutputStream()
+                bmp.compress(Bitmap.CompressFormat.JPEG, 70, bos)
+                call.resolve(JSObject().put("data", Base64.encodeToString(bos.toByteArray(), Base64.NO_WRAP)))
+            } catch (e: Exception) {
+                call.resolve(JSObject())
+            }
+        }
+    }
+
+    /** Abre el reproductor con una lista de archivos. */
+    @PluginMethod
+    fun playMedia(call: PluginCall) {
+        val arr = call.getArray("items")
+        if (arr == null || arr.length() == 0) {
+            call.reject("No hay archivos para reproducir")
+            return
+        }
+        val uris = ArrayList<String>()
+        val titles = ArrayList<String>()
+        val artists = ArrayList<String>()
+        for (i in 0 until arr.length()) {
+            val o = arr.optJSONObject(i) ?: continue
+            val u = o.optString("uri")
+            if (u.isNullOrBlank()) continue
+            uris.add(u)
+            titles.add(o.optString("title"))
+            artists.add(o.optString("artist"))
+        }
+        if (uris.isEmpty()) {
+            call.reject("No hay archivos para reproducir")
+            return
+        }
+        SharedStore.queueUris = uris
+        SharedStore.queueTitles = titles
+        SharedStore.queueArtists = artists
+        try {
+            val intent = Intent(activity, PlayerActivity::class.java)
+            intent.putExtra("kind", call.getString("kind") ?: "video")
+            intent.putExtra("index", (call.getInt("index") ?: 0).coerceIn(0, uris.size - 1))
+            activity.startActivity(intent)
+            call.resolve()
+        } catch (e: Exception) {
+            call.reject("No se pudo abrir el reproductor: " + shortMsg(e))
+        }
     }
 
     // ------------------------------------------- abrir / eliminar archivos

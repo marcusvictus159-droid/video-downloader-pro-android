@@ -40,7 +40,7 @@ if not APP.is_dir():
 # 1) Código nativo -----------------------------------------------------------
 java_dir = APP / "src" / "main" / "java" / pathlib.Path(*PKG.split("."))
 java_dir.mkdir(parents=True, exist_ok=True)
-for name in ("YtDlpPlugin.kt", "BrowserActivity.kt", "FormatPicker.kt", "SharedStore.java", "MainActivity.java"):
+for name in ("YtDlpPlugin.kt", "BrowserActivity.kt", "FormatPicker.kt", "PlayerActivity.kt", "DownloadService.kt", "SharedStore.java", "MainActivity.java"):
     shutil.copy2(NATIVE / name, java_dir / name)
 print("[ok] código nativo copiado a", java_dir)
 
@@ -133,6 +133,15 @@ if "youtubedl-android" not in s:
     if n == 0:
         fail("no se encontró el bloque dependencies en app/build.gradle")
 
+if "media3-exoplayer" not in s:
+    media = (
+        "    implementation 'androidx.media3:media3-exoplayer:1.4.1'\n"
+        "    implementation 'androidx.media3:media3-ui:1.4.1'\n"
+    )
+    s, n = re.subn(r"(\ndependencies\s*\{\n)", lambda _m: _m.group(1) + media, s, count=1)
+    if n == 0:
+        fail("no se encontró el bloque dependencies para Media3")
+
 write(app_gradle, s)
 print("[ok] app/build.gradle (Kotlin %s, yt-dlp %s, JVM %s)" % (KOTLIN_VERSION, YTDL_VERSION, jvm))
 
@@ -170,6 +179,52 @@ if "BrowserActivity" not in s:
     s, n = re.subn(r"</application>", lambda _m: activity + "</application>", s, count=1)
     if n == 0:
         fail("no se encontró </application> en el manifest")
+
+if "PlayerActivity" not in s:
+    player = (
+        '    <activity\n'
+        '        android:name=".PlayerActivity"\n'
+        '        android:exported="false"\n'
+        '        android:theme="@style/AppTheme.NoActionBar"\n'
+        '        android:configChanges="orientation|screenSize|keyboardHidden|smallestScreenSize|screenLayout|uiMode|density" />\n'
+        '    '
+    )
+    s, n = re.subn(r"</application>", lambda _m: player + "</application>", s, count=1)
+    if n == 0:
+        fail("no se encontró </application> para PlayerActivity")
+
+if "READ_MEDIA_VIDEO" not in s:
+    perms = (
+        '    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />\n'
+        '    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />\n'
+        '    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />\n'
+    )
+    s, n = re.subn(r"</manifest>", lambda _m: perms + "</manifest>", s, count=1)
+    if n == 0:
+        fail("no se encontró </manifest>")
+
+if "DownloadService" not in s:
+    svc = (
+        '    <service\n'
+        '        android:name=".DownloadService"\n'
+        '        android:exported="false"\n'
+        '        android:foregroundServiceType="dataSync" />\n'
+        '    '
+    )
+    s, n = re.subn(r"</application>", lambda _m: svc + "</application>", s, count=1)
+    if n == 0:
+        fail("no se encontró </application> para DownloadService")
+
+if "FOREGROUND_SERVICE_DATA_SYNC" not in s:
+    perms = (
+        '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />\n'
+        '    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_DATA_SYNC" />\n'
+        '    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />\n'
+        '    <uses-permission android:name="android.permission.WAKE_LOCK" />\n'
+    )
+    s, n = re.subn(r"</manifest>", lambda _m: perms + "</manifest>", s, count=1)
+    if n == 0:
+        fail("no se encontró </manifest> para el servicio")
 
 write(manifest, s)
 print("[ok] AndroidManifest (nativeLibs + compartir enlaces + navegador)")
