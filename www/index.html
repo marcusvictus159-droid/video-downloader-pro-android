@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="color-scheme" content="light dark">
+  <title>Video Downloader Pro</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <div>
+        <h1>🎥 Video Downloader Pro</h1>
+        <p class="sub">Videos y música en máxima calidad</p>
+      </div>
+      <button id="themeBtn" class="icon-btn" aria-label="Cambiar tema" title="Tema">🌓</button>
+    </header>
+
+    <section class="card">
+      <div class="engine">
+        <span id="engineDot" class="dot busy"></span>
+        <span id="engineText">Preparando motor…</span>
+        <button id="updateBtn" class="chip" disabled>Actualizar</button>
+      </div>
+    </section>
+
+    <section class="card">
+      <label for="urls" class="lbl">Enlaces (uno por línea)</label>
+      <textarea id="urls" rows="4" placeholder="Pega aquí enlaces de YouTube, Facebook, TikTok, Twitter…" autocomplete="off" autocapitalize="off" spellcheck="false"></textarea>
+      <div class="row">
+        <button id="pasteBtn" class="chip">📋 Pegar</button>
+        <button id="clearBtn" class="chip">🧹 Limpiar</button>
+      </div>
+
+      <div class="seg" role="group" aria-label="Formato">
+        <button class="seg-btn active" data-fmt="mp4">🎬 Video MP4</button>
+        <button class="seg-btn" data-fmt="mp3">🎵 Audio MP3</button>
+      </div>
+
+      <div id="qualityRow" class="field">
+        <label for="quality">Calidad máxima</label>
+        <select id="quality">
+          <option value="0">La mejor disponible</option>
+          <option value="2160">2160p (4K)</option>
+          <option value="1440">1440p</option>
+          <option value="1080" selected>1080p (Full HD)</option>
+          <option value="720">720p (HD)</option>
+          <option value="480">480p</option>
+          <option value="360">360p</option>
+        </select>
+      </div>
+
+      <label class="check"><input type="checkbox" id="skipHist" checked> Omitir videos ya descargados</label>
+      <label class="check"><input type="checkbox" id="allowList"> Permitir listas de reproducción completas</label>
+
+      <div class="actions">
+        <button id="startBtn" class="btn primary" disabled>⬇️ Descargar</button>
+        <button id="cancelAllBtn" class="btn danger" hidden>⛔ Cancelar todo</button>
+      </div>
+    </section>
+
+    <section class="card" id="queueCard" hidden>
+      <h2>Descargas</h2>
+      <ul id="queue" class="queue"></ul>
+    </section>
+
+    <section class="card">
+      <details>
+        <summary>Consola</summary>
+        <pre id="console" aria-live="polite"></pre>
+      </details>
+    </section>
+
+    <section class="card">
+      <div class="row between">
+        <span>Historial: <b id="histCount">0</b> videos</span>
+        <button id="clearHist" class="chip">Borrar historial</button>
+      </div>
+      <p class="hint">Los archivos se guardan en <b>Descargas/VideoDownloaderPro</b>. Mantén la app abierta mientras descarga.</p>
+    </section>
+
+    <footer>Úsalo solo con contenido propio o que tengas permiso de descargar.</footer>
+  </main>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="app.js"></script>
+</body>
+</html>

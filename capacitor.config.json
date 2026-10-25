@@ -1,0 +1,8 @@
+{
+  "appId": "com.videodownloader.pro",
+  "appName": "Video Downloader Pro",
+  "webDir": "www",
+  "server": {
+    "androidScheme": "https"
+  }
+}

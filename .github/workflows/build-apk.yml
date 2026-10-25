@@ -1,0 +1,60 @@
+name: Compilar APK
+
+on:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Instalar dependencias
+        run: npm install
+
+      - name: Generar proyecto Android
+        run: npx cap add android
+
+      - name: Aplicar parche (yt-dlp, FFmpeg, plugin nativo)
+        run: python3 scripts/patch_android.py
+
+      - name: Sincronizar web con Android
+        run: npx cap sync android
+
+      - name: Compilar APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Renombrar APK
+        run: cp android/app/build/outputs/apk/debug/app-debug.apk VideoDownloaderPro.apk
+
+      - name: Guardar APK como artefacto
+        uses: actions/upload-artifact@v4
+        with:
+          name: VideoDownloaderPro-apk
+          path: VideoDownloaderPro.apk
+
+      - name: Publicar en Releases (para bajarlo directo desde el celular)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-${{ github.run_number }}
+          name: Video Downloader Pro #${{ github.run_number }}
+          files: VideoDownloaderPro.apk
+          make_latest: true
