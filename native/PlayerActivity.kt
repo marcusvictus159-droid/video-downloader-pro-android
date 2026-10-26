@@ -129,7 +129,7 @@ class PlayerActivity : AppCompatActivity() {
                 setControllerShowTimeoutMs(0)
                 setControllerHideOnTouch(false)
                 setShowShuffleButton(true)
-                setRepeatToggleModes(Player.REPEAT_TOGGLE_MODE_ONE or Player.REPEAT_TOGGLE_MODE_ALL)
+                setRepeatToggleModes(androidx.media3.common.util.RepeatModeUtil.REPEAT_TOGGLE_MODE_ONE or androidx.media3.common.util.RepeatModeUtil.REPEAT_TOGGLE_MODE_ALL)
             } else {
                 setControllerShowTimeoutMs(3000)
                 setFullscreenButtonClickListener { fullscreen ->
